@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use configuration::network;
+use crate::configuration::network;
 
 pub fn get_time() -> u32 {
     let epoch = DateTime::parse_from_rfc3339(network::get().epoch())

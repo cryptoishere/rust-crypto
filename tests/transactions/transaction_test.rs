@@ -1,5 +1,5 @@
 use arkecosystem_crypto::transactions::deserializer;
-use *;
+use crate::*;
 
 #[test]
 fn test_deserialize() {

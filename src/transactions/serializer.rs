@@ -1,11 +1,12 @@
-use bitcoin::util::base58;
+use bs58;
 use byteorder::{LittleEndian, WriteBytesExt};
 use hex;
 use std::io::prelude::*;
 
-use configuration::network;
-use enums::TransactionType;
-use transactions::transaction::{Asset, Transaction};
+use crate::configuration::network;
+use crate::enums::assets::Asset;
+use crate::enums::TransactionType;
+use crate::transactions::transaction::Transaction;
 
 pub fn serialize(transaction: &Transaction) -> String {
     let mut bytes = vec![];
@@ -83,8 +84,12 @@ fn serialize_transfer(transaction: &Transaction, bytes: &mut Vec<u8>) {
     bytes
         .write_u32::<LittleEndian>(transaction.expiration)
         .unwrap();
-
-    let recipient_id = base58::from_check(&transaction.recipient_id).unwrap();
+    // TODO: handle error
+    let recipient_id = bs58::decode(&transaction.recipient_id)
+        .with_alphabet(bs58::Alphabet::BITCOIN)
+        .with_check(None)
+        .into_vec()
+        .unwrap();
     bytes.write_all(&recipient_id).unwrap();
 }
 

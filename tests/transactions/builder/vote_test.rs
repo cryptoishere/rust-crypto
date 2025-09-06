@@ -26,7 +26,6 @@ fn test_signed_with_a_second_passphrase() {
     );
 
     let second_public_key = public_key::from_passphrase("this is a top secret second passphrase")
-        .unwrap()
         .to_string();
 
     assert!(transaction.is_ok());

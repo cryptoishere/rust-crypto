@@ -1,11 +1,12 @@
-use failure;
+use anyhow;
 use hex;
 
-use configuration::fees;
-use enums::TransactionType;
-use identities::{address, public_key};
-use transactions::transaction::{Asset, Transaction};
-use utils::slot;
+use crate::configuration::fees;
+use crate::enums::assets::Asset;
+use crate::enums::{TransactionGroup, TransactionType};
+use crate::identities::{address, public_key};
+use crate::transactions::transaction::Transaction;
+use crate::utils::slot;
 
 pub fn build_transfer(
     passphrase: &str,
@@ -13,24 +14,58 @@ pub fn build_transfer(
     recipient_id: &str,
     amount: u64,
     vendor_field: &str,
-) -> Result<Transaction, failure::Error> {
+    nonce: u64,
+    fee: u64,
+    version: u8,
+    network: u8,
+) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::Transfer);
     transaction.recipient_id = recipient_id.to_owned();
     transaction.amount = amount;
     transaction.vendor_field = vendor_field.to_owned();
+    transaction.fee = fee;
+    transaction.nonce = nonce;
+    transaction.version = version;
+    transaction.network = network;
+    transaction.type_group = TransactionGroup::Core as u32;
 
     Ok(sign(transaction, passphrase, second_passphrase))
+}
+
+pub fn build_transfer_hash(
+    passphrase: &str,
+    second_passphrase: Option<&str>,
+    recipient_id: &str,
+    amount: u64,
+    vendor_field: &str,
+    nonce: u64,
+    fee: u64,
+    version: u8,
+    network: u8,
+) -> Result<Transaction, anyhow::Error> {
+    let mut transaction = create(TransactionType::Transfer);
+    transaction.recipient_id = recipient_id.to_owned();
+    transaction.amount = amount;
+    transaction.vendor_field = vendor_field.to_owned();
+    transaction.fee = fee;
+    transaction.nonce = nonce;
+    transaction.version = version;
+    transaction.network = network;
+    transaction.type_group = TransactionGroup::Core as u32;
+
+    Ok(hash(transaction, passphrase, second_passphrase))
 }
 
 pub fn build_second_signature_registration(
     passphrase: &str,
     second_passphrase: &str,
-) -> Result<Transaction, failure::Error> {
+) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::SecondSignatureRegistration);
 
     transaction.asset = Asset::Signature {
         public_key: hex::encode(
-            public_key::from_passphrase(second_passphrase)?
+            // TODO: Handle error
+            public_key::from_passphrase(second_passphrase)
                 .serialize()
                 .to_vec(),
         ),
@@ -43,7 +78,7 @@ pub fn build_delegate_registration(
     passphrase: &str,
     second_passphrase: Option<&str>,
     username: &str,
-) -> Result<Transaction, failure::Error> {
+) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::DelegateRegistration);
 
     transaction.asset = Asset::Delegate {
@@ -57,10 +92,10 @@ pub fn build_vote(
     passphrase: &str,
     second_passphrase: Option<&str>,
     votes: Vec<String>,
-) -> Result<Transaction, failure::Error> {
+) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::Vote);
     transaction.asset = Asset::Votes(votes);
-    transaction.recipient_id = address::from_passphrase(passphrase, None)?;
+    transaction.recipient_id = address::from_passphrase(passphrase, None);
 
     Ok(sign(transaction, passphrase, second_passphrase))
 }
@@ -71,7 +106,7 @@ pub fn build_multi_signature_registration(
     min: u8,
     lifetime: u8,
     keysgroup: Vec<String>,
-) -> Result<Transaction, failure::Error> {
+) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::MultiSignatureRegistration);
 
     let len = (keysgroup.len() + 1) as u64;
@@ -92,6 +127,22 @@ fn sign(
 ) -> Transaction {
     transaction.timestamp = slot::get_time();
     transaction.sign(passphrase);
+
+    if let Some(value) = second_passphrase {
+        transaction.second_sign(value);
+    }
+
+    transaction.id = transaction.get_id();
+    transaction
+}
+
+fn hash(
+    mut transaction: Transaction,
+    passphrase: &str,
+    second_passphrase: Option<&str>,
+) -> Transaction {
+    transaction.timestamp = slot::get_time();
+    transaction.hash(passphrase);
 
     if let Some(value) = second_passphrase {
         transaction.second_sign(value);

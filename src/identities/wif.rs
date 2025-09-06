@@ -1,4 +1,4 @@
-use bitcoin::util::base58;
+use bs58;
 use sha2::{Digest, Sha256};
 
 use super::super::configuration;
@@ -10,7 +10,10 @@ pub fn from_passphrase(passphrase: &str) -> String {
     bytes.extend_from_slice(&Sha256::digest(&passphrase.as_bytes()));
     bytes.push(0x01);
 
-    base58::check_encode_slice(&bytes)
+    bs58::encode(&bytes)
+        .with_alphabet(bs58::Alphabet::BITCOIN)
+        .with_check()
+        .into_string()
 }
 
 #[cfg(test)]

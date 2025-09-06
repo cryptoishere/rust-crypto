@@ -2,12 +2,12 @@ mod macros;
 pub mod message;
 pub mod slot;
 
-use failure;
+use anyhow;
 use hex;
 
 pub use self::message::Message;
 
-pub fn str_from_hex(string: &str) -> Result<String, failure::Error> {
+pub fn str_from_hex(string: &str) -> Result<String, anyhow::Error> {
     Ok(String::from_utf8(hex::decode(string)?)?.to_string())
 }
 

@@ -9,6 +9,10 @@ fn test_signed_with_a_passphrase() {
         "AXoXnFi4z1Z6aFvjEYkDVCtBGW2PaRiM25",
         133_380_000_000,
         "This is a transaction from Rust",
+        1,
+        1,
+        1,
+        63
     );
 
     assert!(transaction.is_ok());
@@ -23,10 +27,13 @@ fn test_signed_with_a_second_passphrase() {
         "AXoXnFi4z1Z6aFvjEYkDVCtBGW2PaRiM25",
         133_380_000_000,
         "This is a transaction from Rust",
+        1,
+        1,
+        1,
+        63
     );
 
     let second_public_key = public_key::from_passphrase("this is a top secret second passphrase")
-        .unwrap()
         .to_string();
 
     assert!(transaction.is_ok());

@@ -1,7 +1,7 @@
 use arkecosystem_crypto::configuration::network;
 use arkecosystem_crypto::enums::{Network, TransactionType};
 use arkecosystem_crypto::transactions::deserializer;
-use *;
+use crate::*;
 
 #[test]
 fn test_signed_with_a_second_passphrase() {

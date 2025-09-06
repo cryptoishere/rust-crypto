@@ -1,4 +1,4 @@
-use enums::networks::Network;
+use crate::enums::networks::Network;
 use std::sync::Mutex;
 
 lazy_static! {

@@ -1,5 +1,5 @@
 use hex;
-use secp256k1::Signature;
+use secp256k1::ecdsa::Signature;
 use serde_json;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -25,7 +25,7 @@ impl Message {
     }
 
     pub fn sign(message: &str, passphrase: &str) -> Message {
-        let key = private_key::from_passphrase(passphrase).unwrap();
+        let key = private_key::from_passphrase(passphrase);
         let public_key = public_key::from_private_key(&key);
 
         Message {
@@ -39,7 +39,7 @@ impl Message {
     pub fn verify(&self) -> bool {
         let hash = Sha256::digest(&self.message.as_bytes());
 
-        let message = secp256k1::Message::from_slice(&hash);
+        let message = secp256k1::Message::from_digest_slice(&hash);
         if message.is_err() {
             return false;
         }
@@ -56,7 +56,7 @@ impl Message {
 
         let pk = public_key::from_hex(&self.public_key).unwrap();
         SECP256K1
-            .verify(&message.unwrap(), &signature.unwrap(), &pk)
+            .verify_ecdsa(&message.unwrap(), &signature.unwrap(), &pk)
             .is_ok()
     }
 

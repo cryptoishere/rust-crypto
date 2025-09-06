@@ -1,14 +1,15 @@
-use bitcoin::util::base58;
+use bs58;
 use byteorder::{LittleEndian, ReadBytesExt};
 use hex;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::io::SeekFrom;
 
-use enums::TransactionType;
-use identities::{address, public_key};
-use transactions::transaction::{Asset, Transaction};
-use utils;
+use crate::enums::assets::Asset;
+use crate::enums::TransactionType;
+use crate::identities::{address, public_key};
+use crate::transactions::transaction::Transaction;
+use crate::utils;
 
 pub fn deserialize(serialized: &str) -> Transaction {
     let decoded = hex::decode(serialized).unwrap();
@@ -96,8 +97,13 @@ fn deserialize_transfer(
     transaction.expiration = bytes.read_u32::<LittleEndian>().unwrap();
 
     let mut recipient_id_buf = [0; 21];
+    // TODO: handle error
     bytes.read_exact(&mut recipient_id_buf).unwrap();
-    transaction.recipient_id = base58::check_encode_slice(&recipient_id_buf);
+    transaction.recipient_id = bs58::encode(&recipient_id_buf)
+        .with_alphabet(bs58::Alphabet::BITCOIN)
+        .with_check()
+        .into_string()
+;
 
     *asset_offset += (21 + 12) * 2;
 }

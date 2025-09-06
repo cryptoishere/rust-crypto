@@ -1,4 +1,4 @@
-use enums::TransactionType;
+use crate::enums::TransactionType;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
