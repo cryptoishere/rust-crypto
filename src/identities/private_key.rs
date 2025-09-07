@@ -73,7 +73,7 @@ fn hash_challenge(R_bytes: &[u8; 32], A_bytes: &[u8], msg: &[u8]) -> [u8; 32] {
 /// Convert 32-byte array to U256 modulo n (rejects zero)
 fn to_scalar(bytes: &[u8; 32]) -> Result<U256, DecodeError> {
     let scalar = U256::from_be_slice(bytes) % *N;
-    if !bool::from(scalar.is_zero()) {
+    if bool::from(scalar.is_zero()) {
         return Err(DecodeError::InvalidDigit);
     }
 
