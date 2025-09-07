@@ -1,11 +1,8 @@
-mod macros;
-pub mod message;
-pub mod slot;
-
 use anyhow;
 use hex;
 
-pub use self::message::Message;
+mod macros;
+pub mod slot;
 
 pub fn str_from_hex(string: &str) -> Result<String, anyhow::Error> {
     Ok(String::from_utf8(hex::decode(string)?)?.to_string())

@@ -286,7 +286,7 @@ fn handle_version_one(transaction: &mut Transaction) {
         TransactionType::Vote => {
             let public_key = public_key::from_hex(&transaction.sender_public_key).unwrap();
             transaction.recipient_id =
-                address::from_public_key(&public_key, Some(transaction.network));
+                address::from_public_key(&public_key, Some(transaction.network)).unwrap();
         }
         TransactionType::MultiSignatureRegistration => {
             if let Asset::MultiSignatureRegistration {
@@ -307,19 +307,19 @@ fn handle_version_one(transaction: &mut Transaction) {
     }
 
     if transaction.id.is_empty() {
-        transaction.id = transaction.get_id();
+        transaction.id = transaction.get_id().unwrap();
     }
 
     match transaction.type_id {
         TransactionType::SecondSignatureRegistration => {
             let public_key = public_key::from_hex(&transaction.sender_public_key).unwrap();
             transaction.recipient_id =
-                address::from_public_key(&public_key, Some(transaction.network));
+                address::from_public_key(&public_key, Some(transaction.network)).unwrap();
         }
         TransactionType::MultiSignatureRegistration => {
             let public_key = public_key::from_hex(&transaction.sender_public_key).unwrap();
             transaction.recipient_id =
-                address::from_public_key(&public_key, Some(transaction.network));
+                address::from_public_key(&public_key, Some(transaction.network)).unwrap();
         }
         _ => (),
     }

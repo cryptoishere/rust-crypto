@@ -1,3 +1,4 @@
+use anyhow::{anyhow};
 use bs58;
 use byteorder::{LittleEndian, WriteBytesExt};
 use hex;
@@ -60,21 +61,21 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn get_id(&self) -> String {
-        let bytes = self.to_bytes(false, false);
-        hex::encode(Sha256::digest(&bytes))
+    pub fn get_id(&self) -> anyhow::Result<String> {
+        let bytes = self.to_bytes(false, false)?;
+        Ok(hex::encode(Sha256::digest(&bytes)))
     }
 
     pub fn sign(&mut self, passphrase: &str) -> &Self {
-        let private_key = private_key::from_passphrase(passphrase);
+        let private_key = private_key::from_passphrase(passphrase.as_bytes()).expect("Unable to get Secret Key");
         let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
-        self.signature = private_key::sign(&self.to_bytes(true, true), passphrase);
+        self.signature = private_key::sign(&self.to_bytes(true, true).unwrap(), passphrase).expect("Unable to sign");
         self
     }
 
     pub fn second_sign(&mut self, passphrase: &str) -> &Self {
-        self.sign_signature = private_key::sign(&self.to_bytes(false, true), passphrase);
+        self.sign_signature = private_key::sign(&self.to_bytes(false, true).unwrap(), passphrase).expect("Unable to sign");
         self
     }
 
@@ -82,7 +83,7 @@ impl Transaction {
         self.internal_verify(
             &self.sender_public_key,
             &self.signature,
-            &self.to_bytes(true, true),
+            &self.to_bytes(true, true).unwrap(),
         )
     }
 
@@ -90,37 +91,37 @@ impl Transaction {
         self.internal_verify(
             &sender_public_key,
             &self.sign_signature,
-            &self.to_bytes(false, true),
+            &self.to_bytes(false, true).unwrap(),
         )
     }
 
-    pub fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> Vec<u8> {
+    pub fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
         let mut buffer = vec![];
 
-        buffer.write_u8(0xFF).unwrap();
+        buffer.write_u8(0xFF)?;
 
-        buffer.write_u8(self.version as u8).unwrap();
-        buffer.write_u8(self.network as u8).unwrap();
-        buffer.write_u32::<LittleEndian>(self.type_group).unwrap();
-        buffer.write_u16::<LittleEndian>(self.type_id as u16).unwrap();
+        buffer.write_u8(self.version as u8)?;
+        buffer.write_u8(self.network as u8)?;
+        buffer.write_u32::<LittleEndian>(self.type_group)?;
+        buffer.write_u16::<LittleEndian>(self.type_id as u16)?;
 
-        buffer.write_u64::<LittleEndian>(self.nonce).unwrap();
+        buffer.write_u64::<LittleEndian>(self.nonce)?;
 
-        buffer.extend_from_slice(&hex::decode(&self.sender_public_key).unwrap());
+        buffer.extend_from_slice(&hex::decode(&self.sender_public_key)?);
 
-        buffer.write_u64::<LittleEndian>(self.fee).unwrap();
+        buffer.write_u64::<LittleEndian>(self.fee)?;
 
         if self.vendor_field.is_empty() {
-            buffer.write_u8(0x00).unwrap();
+            buffer.write_u8(0x00)?;
         } else {
             let vendor_bytes = self.vendor_field.as_bytes();
-            buffer.write_u8(vendor_bytes.len() as u8).unwrap();
+            buffer.write_u8(vendor_bytes.len() as u8)?;
             buffer.extend_from_slice(vendor_bytes);
         }
 
-        buffer.write_u64::<LittleEndian>(self.amount).unwrap();
+        buffer.write_u64::<LittleEndian>(self.amount)?;
 
-        buffer.write_u32::<LittleEndian>(self.expiration).unwrap();
+        buffer.write_u32::<LittleEndian>(self.expiration)?;
 
         let skip_recipient_id = self.type_id == TransactionType::SecondSignatureRegistration
             || self.type_id == TransactionType::MultiSignatureRegistration;
@@ -130,8 +131,7 @@ impl Transaction {
             bs58::decode(&self.recipient_id)
                 .with_alphabet(bs58::Alphabet::BITCOIN)
                 .with_check(None)
-                .into_vec()
-                .unwrap()
+                .into_vec()?
         } else {
             iter::repeat(0).take(21).collect()
         };
@@ -142,7 +142,7 @@ impl Transaction {
 
         // Payload
         let payload: Vec<u8> = match self.asset {
-            Asset::Signature { ref public_key } => hex::decode(&public_key).unwrap(),
+            Asset::Signature { ref public_key } => hex::decode(&public_key)?,
             Asset::Delegate { ref username } => username.to_owned().as_bytes().to_vec(),
             Asset::Votes(ref votes) => votes.join("").as_bytes().to_vec(),
             Asset::MultiSignatureRegistration {
@@ -164,15 +164,15 @@ impl Transaction {
 
         // Signature
         if !skip_signature && !self.signature.is_empty() {
-            buffer.extend_from_slice(&hex::decode(&self.signature).unwrap());
+            buffer.extend_from_slice(&hex::decode(&self.signature)?);
         }
 
         // Second Signature
         if !skip_second_signature && !self.second_signature.is_empty() {
-            buffer.extend_from_slice(&hex::decode(&self.second_signature).unwrap());
+            buffer.extend_from_slice(&hex::decode(&self.second_signature)?);
         }
 
-        buffer
+        Ok(buffer)
     }
 
     fn internal_verify(&self, sender_public_key: &str, signature: &str, hash_bytes: &[u8]) -> bool {
@@ -184,21 +184,24 @@ impl Transaction {
         SECP256K1.verify_ecdsa(&msg, &sig, &pk).is_ok()
     }
 
-    pub fn hash(&mut self, passphrase: &str) -> &Self {
-        let private_key = private_key::from_passphrase(passphrase);
+    pub fn hash(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
+        let private_key = private_key::from_passphrase(passphrase.as_bytes())
+            .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
+
         let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
 
-        let data = private_key::hash(&self.to_bytes(true, true), passphrase);
+        let data = private_key::hash(&self.to_bytes(true, true)?, passphrase.as_bytes())
+            .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
 
         self.keys = SerializableKeypair::from_keys(&data.1.public_key(), &data.1.secret_key());
         self.hash = TransactionHash { hash: data.0.as_ref().clone()};
-        self
+        Ok(self)
     }
 
-    pub fn sign_schnorr(&mut self, passphrase: &str) -> &Self {
-        self.signature = private_key::sign_schnorr_bcrypto_legacy(&self.hash.hash, passphrase);
-        self
+    pub fn sign_schnorr(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
+        self.signature = private_key::sign_schnorr_bcrypto_legacy(&self.hash.hash, passphrase)?;
+        Ok(self)
     }
 
     pub fn to_params(&self) -> Result<serde_json::Value, serde_json::Error> {

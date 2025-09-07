@@ -1,3 +1,4 @@
+use anyhow::{Result, anyhow};
 use bs58;
 use hex;
 use secp256k1::PublicKey;
@@ -9,36 +10,37 @@ use super::super::configuration;
 use super::private_key;
 use super::public_key;
 
-pub fn from_passphrase(passphrase: &str, network_version: Option<u8>) -> String {
-    let private_key = private_key::from_passphrase(passphrase);
+pub fn from_passphrase(passphrase: &str, network_version: Option<u8>) -> Result<String> {
+    let private_key = private_key::from_passphrase(passphrase.as_bytes())
+        .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
+
     from_private_key(&private_key, network_version)
 }
 
-fn from_private_key(private_key: &PrivateKey, network_version: Option<u8>) -> String {
+fn from_private_key(private_key: &PrivateKey, network_version: Option<u8>) -> Result<String> {
     let public_key = public_key::from_private_key(private_key);
     from_public_key(&public_key, network_version)
 }
 
-pub fn from_public_key(public_key: &PublicKey, network_version: Option<u8>) -> String {
+pub fn from_public_key(public_key: &PublicKey, network_version: Option<u8>) -> Result<String> {
     let network_version = match network_version {
         Some(network_version) => network_version,
         None => configuration::network::get().version(),
     };
 
-    // TODO: fix unwrap
-    let bytes = hex::decode(public_key.to_string()).unwrap();
+    let bytes = hex::decode(public_key.to_string())?;
 
     let ripemd160 = Ripemd160::digest(&bytes);
     let mut data = vec![];
     data.push(network_version);
     data.extend_from_slice(&ripemd160);
-    bs58::encode(&data)
+    Ok(bs58::encode(&data)
         .with_alphabet(bs58::Alphabet::BITCOIN)
         .with_check()
-        .into_string()
+        .into_string())
 }
 
-pub fn validate(address: &str, network_version: Option<u8>) -> bool {
+pub fn validate(address: &str, network_version: Option<u8>) -> Result<bool> {
     let network_version = match network_version {
         Some(network_version) => network_version,
         None => configuration::network::get().version(),
@@ -47,12 +49,16 @@ pub fn validate(address: &str, network_version: Option<u8>) -> bool {
     let bytes = bs58::decode(address)
         .with_alphabet(bs58::Alphabet::BITCOIN)
         .with_check(None)
-        .into_vec();
-    if let Ok(value) = bytes {
-        return *value.first().unwrap() == network_version;
-    }
+        .into_vec()?;
 
-    false
+    match bytes.first() {
+        Some(byte) => {
+            Ok(*byte == network_version)
+        }
+        None => {
+            Ok(false)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -66,7 +72,7 @@ mod test {
         let private_key = from_passphrase(
             "this is a top secret passphrase",
             Some(Network::Devnet.version()),
-        );
+        ).unwrap();
         assert_eq!(
             private_key.to_string(),
             "D61mfSggzbvQgTUe6JhYKH2doHaqJ3Dyib"

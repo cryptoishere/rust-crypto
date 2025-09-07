@@ -29,7 +29,7 @@ pub fn build_transfer(
     transaction.network = network;
     transaction.type_group = TransactionGroup::Core as u32;
 
-    Ok(sign(transaction, passphrase, second_passphrase))
+    Ok(sign(transaction, passphrase, second_passphrase)?)
 }
 
 pub fn build_transfer_hash(
@@ -53,7 +53,7 @@ pub fn build_transfer_hash(
     transaction.network = network;
     transaction.type_group = TransactionGroup::Core as u32;
 
-    Ok(hash(transaction, passphrase, second_passphrase))
+    Ok(hash(transaction, passphrase, second_passphrase)?)
 }
 
 pub fn build_second_signature_registration(
@@ -65,13 +65,13 @@ pub fn build_second_signature_registration(
     transaction.asset = Asset::Signature {
         public_key: hex::encode(
             // TODO: Handle error
-            public_key::from_passphrase(second_passphrase)
+            public_key::from_passphrase(second_passphrase)?
                 .serialize()
                 .to_vec(),
         ),
     };
 
-    Ok(sign(transaction, passphrase, Some(second_passphrase)))
+    Ok(sign(transaction, passphrase, Some(second_passphrase))?)
 }
 
 pub fn build_delegate_registration(
@@ -85,7 +85,7 @@ pub fn build_delegate_registration(
         username: username.to_owned(),
     };
 
-    Ok(sign(transaction, passphrase, second_passphrase))
+    Ok(sign(transaction, passphrase, second_passphrase)?)
 }
 
 pub fn build_vote(
@@ -95,9 +95,9 @@ pub fn build_vote(
 ) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::Vote);
     transaction.asset = Asset::Votes(votes);
-    transaction.recipient_id = address::from_passphrase(passphrase, None);
+    transaction.recipient_id = address::from_passphrase(passphrase, None)?;
 
-    Ok(sign(transaction, passphrase, second_passphrase))
+    Ok(sign(transaction, passphrase, second_passphrase)?)
 }
 
 pub fn build_multi_signature_registration(
@@ -117,14 +117,14 @@ pub fn build_multi_signature_registration(
         keysgroup,
     };
 
-    Ok(sign(transaction, passphrase, second_passphrase))
+    Ok(sign(transaction, passphrase, second_passphrase)?)
 }
 
 fn sign(
     mut transaction: Transaction,
     passphrase: &str,
     second_passphrase: Option<&str>,
-) -> Transaction {
+) -> anyhow::Result<Transaction> {
     transaction.timestamp = slot::get_time();
     transaction.sign(passphrase);
 
@@ -132,24 +132,24 @@ fn sign(
         transaction.second_sign(value);
     }
 
-    transaction.id = transaction.get_id();
-    transaction
+    transaction.id = transaction.get_id()?;
+    Ok(transaction)
 }
 
 fn hash(
     mut transaction: Transaction,
     passphrase: &str,
     second_passphrase: Option<&str>,
-) -> Transaction {
+) -> anyhow::Result<Transaction> {
     transaction.timestamp = slot::get_time();
-    transaction.hash(passphrase);
+    transaction.hash(passphrase)?;
 
     if let Some(value) = second_passphrase {
         transaction.second_sign(value);
     }
 
-    transaction.id = transaction.get_id();
-    transaction
+    transaction.id = transaction.get_id()?;
+    Ok(transaction)
 }
 
 fn create(transaction_type: TransactionType) -> Transaction {
