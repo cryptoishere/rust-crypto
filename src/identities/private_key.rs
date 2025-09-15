@@ -70,9 +70,9 @@ fn hash_challenge(R_bytes: &[u8; 32], A_bytes: &[u8], msg: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// Convert 32-byte array to U256 modulo n (rejects zero)
+/// Convert 32-byte array to U256 modulo n
 fn to_scalar(bytes: &[u8; 32]) -> Result<U256, DecodeError> {
-    let scalar = U256::from_be_slice(bytes) % *N;
+    let scalar = U256::from_be_slice(bytes);
     if bool::from(scalar.is_zero()) {
         return Err(DecodeError::InvalidDigit);
     }
@@ -82,15 +82,18 @@ fn to_scalar(bytes: &[u8; 32]) -> Result<U256, DecodeError> {
 
 /// (a * b) mod n
 fn mul_mod_n(a: &U256, b: &U256) -> Result<U256, Infallible> {
-    let wide = U512::from(a) * U512::from(b);
-    let n_wide = U512::from(&*N); // Convert U256 -> U512 via reference
-    let reduced = wide % n_wide;
+    let n = U256::from_be_slice(&N_RAW);
+    let wide = U512::from(a) * U512::from(b); // a,b -> 512-bit for multiplication
+    let reduced = wide % U512::from(&n); // reduce modulo n
     U256::try_from(&reduced)
 }
 
 /// (a + b) mod n
-fn add_mod_n(a: &U256, b: &U256) -> U256 {
-    (a.wrapping_add(b)) % *N
+fn add_mod_n(a: &U256, b: &U256) -> Result<U256, Infallible> {
+    let n = U512::from(&*N);               // curve order (512-bit)
+    let wide = U512::from(a) + U512::from(b); // promote to 512-bit before add
+    let reduced = wide % n;                   // reduce mod n
+    U256::try_from(&reduced)
 }
 
 /// https://github.com/sipa/bips/blob/d194620/bip-schnorr.mediawiki#user-content-Specification
@@ -100,37 +103,36 @@ fn add_mod_n(a: &U256, b: &U256) -> U256 {
 /// - Aux randomness = zero
 fn schnorrleg_sign(tx_hash: &[u8], seckey: &PrivateKey) -> anyhow::Result<[u8; 64]> {
     let sk_bytes = seckey.secret_bytes();
-
-    // Compressed pubkey A (33 bytes)
     let A = PublicKey::from_secret_key(&SECP256K1, seckey);
-    let A_bytes = A.serialize(); // 33 bytes
+    let A_bytes = A.serialize(); // 33 bytes compressed
 
     // k = H(seckey || tx_hash) mod n
     let mut k = to_scalar(&hash_nonce(tx_hash, &sk_bytes))
         .map_err(|e| anyhow!("Error: {e}"))?;
-
+    
     // R = k * G
     let R_sk = PrivateKey::from_slice(&k.to_be_bytes()).map_err(|e| anyhow!("Error: {e}"))?;
     let R = PublicKey::from_secret_key(&SECP256K1, &R_sk);
-    let R_ser = R.serialize(); // 33 bytes
-    let mut R_x = [0u8; 32];
-    R_x.copy_from_slice(&R_ser[1..33]);
+    let mut R_bytes = [0u8; 32];
+    R_bytes.copy_from_slice(&R.serialize()[1..33]); // x-coordinate
 
-    // If y(R) odd, negate k
-    if R_ser[0] == 0x03 {
-        k = (*N).wrapping_sub(&k) % *N;
+    // If y(R) not square, negate k
+    if R.serialize()[0] % 2 != 0 {
+        let n = U256::from_be_slice(&N_RAW);
+        k = n - k;
     }
 
-    // e = H(R_x || A_compressed || tx_hash) mod n
-    let e = to_scalar(&hash_challenge(&R_x, &A_bytes, tx_hash)).map_err(|e| anyhow!("Error: {e}"))?;
+    // e = H(R || A || tx_hash) mod n
+    let e = to_scalar(&hash_challenge(&R_bytes, &A_bytes, tx_hash))
+        .map_err(|e| anyhow!("Error: {e}"))?;
 
-    // s = k + e*d mod n
+    // s = k + e * d mod n
     let d = to_scalar(&sk_bytes).map_err(|e| anyhow!("Error: {e}"))?;
     let ed = mul_mod_n(&e, &d).map_err(|e| anyhow!("Error: {e}"))?;
-    let s = add_mod_n(&k, &ed);
+    let s = add_mod_n(&k, &ed).map_err(|e| anyhow!("Error: {e}"))?;
 
     let mut sig = [0u8; 64];
-    sig[..32].copy_from_slice(&R_x);
+    sig[..32].copy_from_slice(&R_bytes);
     sig[32..].copy_from_slice(&s.to_be_bytes());
     Ok(sig)
 }
@@ -138,11 +140,11 @@ fn schnorrleg_sign(tx_hash: &[u8], seckey: &PrivateKey) -> anyhow::Result<[u8; 6
 pub fn sign_schnorr_bcrypto_legacy(tx_hash: &[u8], passphrase: &str) -> anyhow::Result<String> {
     let priv_key_bytes = Sha256::digest(passphrase.as_bytes());
     let secret_key = PrivateKey::from_slice(&priv_key_bytes).map_err(|e| anyhow!("Error: {e}"))?;
-    let sig = schnorrleg_sign(tx_hash, &secret_key).map_err(|e| anyhow!("Error: {e}"))?;
+    let sig = schnorrleg_sign(tx_hash, &secret_key)?;
     Ok(hex::encode(sig))
 }
 
-pub fn schnorrleg_verify(msg: &[u8], sig: &[u8; 64], pubkey: &PublicKey) -> anyhow::Result<bool> {
+pub fn schnorrleg_verify(msg: &[u8], sig: &[u8; 64], pubkey: &PublicKey) -> anyhow::Result<bool>  {
     // Split signature into R_x and s
     let mut R_x = [0u8; 32];
     R_x.copy_from_slice(&sig[..32]);
@@ -153,7 +155,7 @@ pub fn schnorrleg_verify(msg: &[u8], sig: &[u8; 64], pubkey: &PublicKey) -> anyh
     let A_bytes = pubkey.serialize();
 
     // e = H(R_x || A_compressed || msg) mod n
-    let e = to_scalar(&hash_challenge(&R_x, &A_bytes, msg)).map_err(|e| anyhow!("Error: {e}"))?;
+    let e = to_scalar(&hash_challenge(&R_x, &A_bytes, msg))?;
 
     // s*G
     let s_sk = SecretKey::from_slice(&s.to_be_bytes()).map_err(|e| anyhow!("Error: {e}"))?;
@@ -162,8 +164,8 @@ pub fn schnorrleg_verify(msg: &[u8], sig: &[u8; 64], pubkey: &PublicKey) -> anyh
     // Compute (-e)*A using tweak bytes
     let neg_e = (*N).wrapping_sub(&e) % *N;
     let neg_e_bytes = neg_e.to_be_bytes(); // [u8;32]
-    let scalar = Scalar::from_be_bytes(neg_e_bytes).map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
-    let neg_eA = pubkey.mul_tweak(&SECP256K1, &scalar).map_err(|e| anyhow!("Secp256k1 error: {}", e))?;;
+    let scalar = Scalar::from_be_bytes(neg_e_bytes).map_err(|e| anyhow!("Error: {}", e))?;
+    let neg_eA = pubkey.mul_tweak(&SECP256K1, &scalar).map_err(|e| anyhow!("Error: {}", e))?;
 
     // R' = s*G + (-e)*A
     let R_candidate = sG.combine(&neg_eA).map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
@@ -187,7 +189,6 @@ mod test {
         ];
 
         let sig_hex = sign_schnorr_bcrypto_legacy(&tx_bytes, passphrase).unwrap();
-        println!("{}", sig_hex);
         assert_eq!(sig_hex, "2314dd6771ae8629a53b4c94ab7c451fc38e6a6832db77168d1cd05cd061585caa15dffb791be143c80d6387b7375fdd122dfaca16570bed65c2bf140c3e16fa");
     }
 
