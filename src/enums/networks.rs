@@ -8,25 +8,25 @@ pub enum Network {
 impl Network {
     pub fn epoch(&self) -> &'static str {
         match *self {
-            Network::Mainnet => "2017-03-21T13:00:00.000Z",
-            Network::Devnet => "2017-03-21T13:00:00.000Z",
-            Network::Testnet => "2017-03-21T13:00:00.000Z",
+            Network::Mainnet => "2023-08-29T00:00:00.000Z",
+            Network::Devnet => "2023-04-21T03:36:39.887Z",
+            Network::Testnet => "2023-07-21T00:00:00.000Z",
         }
     }
 
     pub fn version(&self) -> u8 {
         match *self {
-            Network::Mainnet => 0x17,
-            Network::Devnet => 0x1e,
-            Network::Testnet => 0x17,
+            Network::Mainnet => 0x3F,
+            Network::Devnet => 0x40,
+            Network::Testnet => 0x41,
         }
     }
 
     pub fn wif(&self) -> u8 {
         match *self {
-            Network::Mainnet => 170,
-            Network::Devnet => 170,
-            Network::Testnet => 186,
+            Network::Mainnet => 255,
+            Network::Devnet => 85,
+            Network::Testnet => 68,
         }
     }
 }
