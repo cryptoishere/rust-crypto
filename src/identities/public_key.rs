@@ -1,8 +1,6 @@
 use anyhow::{Result, anyhow};
 use hex;
-use secp256k1::PublicKey;
-
-use crate::identities::private_key::PrivateKey;
+use secp256k1::{PublicKey, SecretKey};
 
 use super::super::SECP256K1;
 use super::private_key;
@@ -22,7 +20,7 @@ pub fn from_hex(public_key: &str) -> Result<PublicKey> {
         .map_err(|e| anyhow!("Secp256k1 error: {}", e))?)
 }
 
-pub fn from_private_key(private_key: &PrivateKey) -> PublicKey {
+pub fn from_private_key(private_key: &SecretKey) -> PublicKey {
     PublicKey::from_secret_key(&SECP256K1, private_key)
 }
 

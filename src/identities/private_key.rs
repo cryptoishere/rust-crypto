@@ -7,14 +7,12 @@ use crypto_bigint::{Encoding, NonZero, U256, U512, Zero, DecodeError};
 
 use super::super::SECP256K1;
 
-pub type PrivateKey = SecretKey;
-
-pub fn from_passphrase(passphrase: &[u8]) -> Result<PrivateKey, Error> {
-    PrivateKey::from_slice(&Sha256::digest(passphrase)[..])
+pub fn from_passphrase(passphrase: &[u8]) -> Result<SecretKey, Error> {
+    SecretKey::from_slice(&Sha256::digest(passphrase)[..])
 }
 
-pub fn from_hex(private_key: &str) -> Result<PrivateKey, Error> {
-    PrivateKey::from_slice(hex::decode(private_key)
+pub fn from_hex(private_key: &str) -> Result<SecretKey, Error> {
+    SecretKey::from_slice(hex::decode(private_key)
         .map_err(|_| Error::InvalidSecretKey)?.as_slice())
 }
 
@@ -101,7 +99,7 @@ fn add_mod_n(a: &U256, b: &U256) -> Result<U256, Infallible> {
 /// - Nonce = H(seckey || msg)
 /// - Challenge = H(R_x || A_compressed || msg)
 /// - Aux randomness = zero
-fn schnorrleg_sign(tx_hash: &[u8], seckey: &PrivateKey) -> anyhow::Result<[u8; 64]> {
+fn schnorrleg_sign(tx_hash: &[u8], seckey: &SecretKey) -> anyhow::Result<[u8; 64]> {
     let sk_bytes = seckey.secret_bytes();
     let A = PublicKey::from_secret_key(&SECP256K1, seckey);
     let A_bytes = A.serialize(); // 33 bytes compressed
@@ -111,7 +109,7 @@ fn schnorrleg_sign(tx_hash: &[u8], seckey: &PrivateKey) -> anyhow::Result<[u8; 6
         .map_err(|e| anyhow!("Error: {e}"))?;
     
     // R = k * G
-    let R_sk = PrivateKey::from_slice(&k.to_be_bytes()).map_err(|e| anyhow!("Error: {e}"))?;
+    let R_sk = SecretKey::from_slice(&k.to_be_bytes()).map_err(|e| anyhow!("Error: {e}"))?;
     let R = PublicKey::from_secret_key(&SECP256K1, &R_sk);
     let mut R_bytes = [0u8; 32];
     R_bytes.copy_from_slice(&R.serialize()[1..33]); // x-coordinate
@@ -139,7 +137,7 @@ fn schnorrleg_sign(tx_hash: &[u8], seckey: &PrivateKey) -> anyhow::Result<[u8; 6
 
 pub fn sign_schnorr_bcrypto_legacy(tx_hash: &[u8], passphrase: &str) -> anyhow::Result<String> {
     let priv_key_bytes = Sha256::digest(passphrase.as_bytes());
-    let secret_key = PrivateKey::from_slice(&priv_key_bytes).map_err(|e| anyhow!("Error: {e}"))?;
+    let secret_key = SecretKey::from_slice(&priv_key_bytes).map_err(|e| anyhow!("Error: {e}"))?;
     let sig = schnorrleg_sign(tx_hash, &secret_key)?;
     Ok(hex::encode(sig))
 }

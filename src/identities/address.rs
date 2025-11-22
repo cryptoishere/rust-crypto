@@ -3,8 +3,7 @@ use bs58;
 use hex;
 use secp256k1::PublicKey;
 use ripemd::{Ripemd160, Digest};
-
-use crate::identities::private_key::PrivateKey;
+use secp256k1::SecretKey;
 
 use super::super::configuration;
 use super::private_key;
@@ -17,7 +16,7 @@ pub fn from_passphrase(passphrase: &str, network_version: Option<u8>) -> Result<
     from_private_key(&private_key, network_version)
 }
 
-fn from_private_key(private_key: &PrivateKey, network_version: Option<u8>) -> Result<String> {
+fn from_private_key(private_key: &SecretKey, network_version: Option<u8>) -> Result<String> {
     let public_key = public_key::from_private_key(private_key);
     from_public_key(&public_key, network_version)
 }

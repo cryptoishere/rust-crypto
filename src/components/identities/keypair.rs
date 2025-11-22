@@ -1,4 +1,4 @@
-use crate::identities::private_key::PrivateKey;
+use secp256k1::SecretKey;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SerializableKeypair {
@@ -11,7 +11,7 @@ pub struct SerializableKeypair {
 }
 
 impl SerializableKeypair {
-    pub fn from_keys(public_key: &secp256k1::PublicKey, secret_key: &PrivateKey) -> Self {
+    pub fn from_keys(public_key: &secp256k1::PublicKey, secret_key: &SecretKey) -> Self {
         Self {
             public_key: hex::encode(public_key.serialize()), // compressed format
             private_key: hex::encode(secret_key.secret_bytes()),
