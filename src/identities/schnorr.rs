@@ -1,7 +1,7 @@
 // schnorr_bcrypto_legacy.rs
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use secp256k1::{Secp256k1, SecretKey, PublicKey};
+use secp256k1::{PublicKey, Scalar, Secp256k1, SecretKey};
 use sha2::{Digest, Sha256};
 use crypto_bigint::{U256, U512, NonZero, Encoding};
 use std::convert::TryInto;
@@ -173,4 +173,139 @@ pub fn schnorrleg_sign(msg: &[u8; 32], seckey: &SecretKey) -> anyhow::Result<[u8
     sig[..32].copy_from_slice(&R_x);
     sig[32..].copy_from_slice(&s.to_be_bytes());
     Ok(sig)
+}
+
+// secp256k1 usage (no BIP-340 shortcuts)
+pub fn schnorrleg_verify(
+    msg: &[u8; 32],
+    sig: &[u8; 64],
+    pubkey: &PublicKey,
+) -> anyhow::Result<bool> {
+    let secp = Secp256k1::new();
+
+    // ---- parse signature ----
+    let mut R_x = [0u8; 32];
+    R_x.copy_from_slice(&sig[..32]);
+
+    let mut s_bytes = [0u8; 32];
+    s_bytes.copy_from_slice(&sig[32..]);
+
+    let s = U256::from_be_bytes(s_bytes);
+    if s == U256::ZERO || s >= *N {
+        return Ok(false);
+    }
+
+    // ---- challenge ----
+    let A_comp = pubkey.serialize();
+    let e_raw = hash_challenge(&R_x, &A_comp, msg);
+    let e = u256_from_32_bytes_reduced(&e_raw);
+
+    // ---- s·G ----
+    let s_sk = SecretKey::from_slice(&s.to_be_bytes()).unwrap();
+    let sG = PublicKey::from_secret_key(&secp, &s_sk);
+
+    // ---- e·A ----
+    let e_scalar = Scalar::from_be_bytes(e.to_be_bytes())
+        .map_err(|_| anyhow!("invalid scalar e"))?;
+
+    let mut eA = pubkey.clone();
+    eA = eA.mul_tweak(&secp, &e_scalar).unwrap();
+
+    // ---- R' = sG − eA ----
+    let neg_eA = eA.negate(&secp);
+    let R_prime = sG.combine(&neg_eA).unwrap();
+
+    // ---- check x-coordinate ----
+    let R_ser = R_prime.serialize();
+    let mut Rx_check = [0u8; 32];
+    Rx_check.copy_from_slice(&R_ser[1..33]);
+
+    if Rx_check != R_x {
+        return Ok(false);
+    }
+
+    // ---- quadratic residue rule ----
+    let R_un = R_prime.serialize_uncompressed();
+    let mut R_y = [0u8; 32];
+    R_y.copy_from_slice(&R_un[33..65]);
+
+    if !is_quad_y_bytes(&R_y)? {
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::rngs::OsRng;
+
+    #[test]
+    fn schnorrleg_sign_verify_roundtrip() {
+        let secp = Secp256k1::new();
+        let mut rng = OsRng;
+
+        // --- keypair ---
+        let seckey = SecretKey::new(&mut rng);
+        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+
+        // --- message ---
+        let msg_hash = Sha256::digest(b"legacy schnorr test");
+        let mut msg = [0u8; 32];
+        msg.copy_from_slice(&msg_hash);
+
+        // --- sign ---
+        let sig = schnorrleg_sign(&msg, &seckey)
+            .expect("signing should succeed");
+
+        // --- verify ---
+        let ok = schnorrleg_verify(&msg, &sig, &pubkey)
+            .expect("verification should not error");
+
+        assert!(ok, "signature should verify");
+    }
+
+    #[test]
+    fn schnorrleg_rejects_modified_message() {
+        let secp = Secp256k1::new();
+        let mut rng = OsRng;
+
+        let seckey = SecretKey::new(&mut rng);
+        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+
+        let msg1_hash = Sha256::digest(b"message one");
+        let mut msg1 = [0u8; 32];
+        msg1.copy_from_slice(&msg1_hash);
+
+        let sig = schnorrleg_sign(&msg1, &seckey).unwrap();
+
+        let msg2_hash = Sha256::digest(b"message two");
+        let mut msg2 = [0u8; 32];
+        msg2.copy_from_slice(&msg2_hash);
+
+        let ok = schnorrleg_verify(&msg2, &sig, &pubkey).unwrap();
+        assert!(!ok, "modified message must not verify");
+    }
+
+    #[test]
+    fn schnorrleg_rejects_modified_signature() {
+        let secp = Secp256k1::new();
+        let mut rng = OsRng;
+
+        let seckey = SecretKey::new(&mut rng);
+        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+
+        let msg_hash = Sha256::digest(b"test message");
+        let mut msg = [0u8; 32];
+        msg.copy_from_slice(&msg_hash);
+
+        let mut sig = schnorrleg_sign(&msg, &seckey).unwrap();
+
+        // flip one bit in s
+        sig[63] ^= 0x01;
+
+        let ok = schnorrleg_verify(&msg, &sig, &pubkey).unwrap();
+        assert!(!ok, "modified signature must not verify");
+    }
 }
