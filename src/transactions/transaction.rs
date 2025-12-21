@@ -2,8 +2,8 @@ use anyhow::{anyhow};
 use bs58;
 use byteorder::{LittleEndian, WriteBytesExt};
 use hex;
+use secp256k1::{Keypair, Message};
 use secp256k1::ecdsa::Signature;
-use secp256k1::Message;
 use serde_json;
 use sha2::{Digest, Sha256};
 use std::iter;
@@ -95,7 +95,7 @@ impl Transaction {
         )
     }
 
-    pub fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
+    pub(crate) fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
         let mut buffer = vec![];
 
         buffer.write_u8(0xFF)?;
@@ -187,15 +187,18 @@ impl Transaction {
     pub fn hash(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
         let private_key = private_key::from_passphrase(passphrase.as_bytes())
             .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
-
+        let keypair = Keypair::from_secret_key(&SECP256K1, &private_key);
         let public_key = public_key::from_private_key(&private_key);
+
         self.sender_public_key = public_key.to_string();
 
-        let data = private_key::hash(&self.to_bytes(true, true)?, passphrase.as_bytes())
-            .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
+        // Compute SHA256 hash of the input message
+        let hash = Sha256::digest(self.to_bytes(true, true)?); // [u8; 32]
+        let msg = Message::from_digest(hash.into());
 
-        self.keys = SerializableKeypair::from_keys(&data.1.public_key(), &data.1.secret_key());
-        self.hash = TransactionHash { hash: data.0.as_ref().clone()};
+        self.keys = SerializableKeypair::from_keys(&keypair.public_key(), &keypair.secret_key());
+        self.hash = TransactionHash { hash: *msg.as_ref()};
+
         Ok(self)
     }
 

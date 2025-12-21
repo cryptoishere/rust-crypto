@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use hex;
-use secp256k1::{Error, Keypair, Message, SecretKey};
+use secp256k1::{Error, Message, SecretKey};
 use sha2::{Digest, Sha256};
 
 use crate::identities::schnorr::schnorrleg_sign;
@@ -27,23 +27,12 @@ pub fn sign(bytes: &[u8], passphrase: &str) -> Result<String, Error> {
     Ok(hex::encode(sig.serialize_der()))
 }
 
-pub fn hash(bytes: &[u8], passphrase: &[u8]) -> Result<(Message, Keypair), Error> {
-    let key = from_passphrase(passphrase)?;
-    let keypair = Keypair::from_secret_key(&SECP256K1, &key);
-
-    // Compute SHA256 hash of the input message
-    let hash = Sha256::digest(bytes); // [u8; 32]
-    let msg = Message::from_digest(hash.into());
-
-    Ok((msg, keypair))
-}
-
 pub fn sign_schnorr_bcrypto_legacy(tx_hash: &[u8], passphrase: &str) -> anyhow::Result<String> {
-    let hash = Sha256::digest(passphrase.as_bytes());
-    let priv_key_bytes: [u8;32] = hash.into();
-    let secret_key = SecretKey::from_slice(&priv_key_bytes).unwrap();
-    let tx_hash_32: [u8;32] = tx_hash.try_into().map_err(|_| anyhow!("tx_hash must be 32 bytes"))?;
+    let secret_key = from_passphrase(passphrase.as_bytes()).map_err(|_| anyhow!("failed convert to bytes"))?;
+    let tx_hash_32: [u8; 32] = tx_hash.try_into().map_err(|_| anyhow!("tx_hash must be 32 bytes"))?;
+
     let sig = schnorrleg_sign(&tx_hash_32, &secret_key)?;
+
     Ok(hex::encode(sig))
 }
 

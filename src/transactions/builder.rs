@@ -44,6 +44,7 @@ pub fn build_transfer_hash(
     network: u8,
 ) -> Result<Transaction, anyhow::Error> {
     let mut transaction = create(TransactionType::Transfer);
+
     transaction.recipient_id = recipient_id.to_owned();
     transaction.amount = amount;
     transaction.vendor_field = vendor_field.to_owned();
@@ -52,8 +53,16 @@ pub fn build_transfer_hash(
     transaction.version = version;
     transaction.network = network;
     transaction.type_group = TransactionGroup::Core as u32;
+    transaction.timestamp = slot::get_time();
+    transaction.hash(passphrase)?;
 
-    Ok(hash(transaction, passphrase, second_passphrase)?)
+    if let Some(value) = second_passphrase {
+        transaction.second_sign(value);
+    }
+
+    transaction.id = transaction.get_id()?;
+
+    Ok(transaction)
 }
 
 pub fn build_second_signature_registration(
@@ -64,7 +73,6 @@ pub fn build_second_signature_registration(
 
     transaction.asset = Asset::Signature {
         public_key: hex::encode(
-            // TODO: Handle error
             public_key::from_passphrase(second_passphrase)?
                 .serialize()
                 .to_vec(),
@@ -127,22 +135,6 @@ fn sign(
 ) -> anyhow::Result<Transaction> {
     transaction.timestamp = slot::get_time();
     transaction.sign(passphrase);
-
-    if let Some(value) = second_passphrase {
-        transaction.second_sign(value);
-    }
-
-    transaction.id = transaction.get_id()?;
-    Ok(transaction)
-}
-
-fn hash(
-    mut transaction: Transaction,
-    passphrase: &str,
-    second_passphrase: Option<&str>,
-) -> anyhow::Result<Transaction> {
-    transaction.timestamp = slot::get_time();
-    transaction.hash(passphrase)?;
 
     if let Some(value) = second_passphrase {
         transaction.second_sign(value);
