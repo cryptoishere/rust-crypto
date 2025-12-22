@@ -13,6 +13,19 @@ fn test_signed_with_a_passphrase() {
 }
 
 #[test]
+fn test_signed_with_a_passphrase_v2() {
+    let transaction = builder::build_second_signature_registration_v2(
+        "passphrase",
+        "second passphrase",
+        1,
+        2,
+        63,
+    );
+
+    assert!(transaction.is_ok());
+}
+
+#[test]
 fn test_signed_with_a_second_passphrase() {
     let transaction = builder::build_second_signature_registration(
         "this is a top secret passphrase",

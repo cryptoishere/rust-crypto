@@ -8,6 +8,7 @@ use crate::identities::{address, public_key};
 use crate::transactions::transaction::Transaction;
 use crate::utils::slot;
 
+#[deprecated]
 pub fn build_transfer(
     passphrase: &str,
     second_passphrase: Option<&str>,
@@ -34,7 +35,7 @@ pub fn build_transfer(
 
 pub fn build_transfer_hash(
     passphrase: &str,
-    second_passphrase: Option<&str>,
+    _second_passphrase: Option<&str>,
     recipient_id: &str,
     amount: u64,
     vendor_field: &str,
@@ -56,15 +57,12 @@ pub fn build_transfer_hash(
     transaction.timestamp = slot::get_time();
     transaction.hash(passphrase)?;
 
-    if let Some(value) = second_passphrase {
-        transaction.second_sign(value);
-    }
-
     transaction.id = transaction.get_id()?;
 
     Ok(transaction)
 }
 
+#[deprecated]
 pub fn build_second_signature_registration(
     passphrase: &str,
     second_passphrase: &str,
@@ -80,6 +78,38 @@ pub fn build_second_signature_registration(
     };
 
     Ok(sign(transaction, passphrase, Some(second_passphrase))?)
+}
+
+pub fn build_second_signature_registration_v2(
+    passphrase: &str,
+    second_passphrase: &str,
+    nonce: u64,
+    version: u8,
+    network: u8,
+) -> Result<Transaction, anyhow::Error> {
+    let mut transaction = create(TransactionType::SecondSignatureRegistration);
+
+    transaction.version = version;
+    transaction.network = network;
+    transaction.type_group = TransactionGroup::Core as u32;
+    transaction.nonce = nonce;
+
+    transaction.asset = Asset::Signature {
+        public_key: hex::encode(
+            public_key::from_passphrase(second_passphrase)?
+                .serialize()
+                .to_vec(),
+        ),
+    };
+
+    transaction.timestamp = slot::get_time();
+    transaction.hash(passphrase)?;
+
+    transaction.id = transaction.get_id()?;
+
+    transaction = transaction.sign_schnorr(passphrase)?;
+
+    Ok(transaction)
 }
 
 pub fn build_delegate_registration(

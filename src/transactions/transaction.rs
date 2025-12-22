@@ -13,6 +13,7 @@ use crate::components::transaction::TransactionHash;
 use crate::enums::assets::Asset;
 use crate::enums::TransactionType;
 use crate::identities::{private_key, public_key};
+use crate::utils::ser::is_zero;
 
 use super::super::SECP256K1;
 
@@ -23,21 +24,22 @@ pub struct Transaction {
     pub header: u8,
     pub version: u8,
     pub network: u8,
+    #[serde(skip_serializing_if = "is_zero")]
     pub type_group: u32,
     #[serde(rename = "type")]
     pub type_id: TransactionType,
     pub nonce: u64,
-    #[serde(skip_serializing_if = "Asset::is_none")]
-    pub asset: Asset,
     #[serde(skip)]
     pub timelock_type: u32,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub signatures: Vec<String>,
-    pub id: String,
     pub sender_public_key: String,
     pub fee: u64,
     pub amount: u64,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub vendor_field: String,
+    #[serde(skip_serializing_if = "Asset::is_none")]
+    pub asset: Asset,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub recipient_id: String,
     #[serde(skip)]
@@ -58,6 +60,7 @@ pub struct Transaction {
     pub hash: TransactionHash,
     #[serde(skip)]
     pub keys: SerializableKeypair,
+    pub id: String,
 }
 
 impl Transaction {
@@ -119,26 +122,30 @@ impl Transaction {
             buffer.extend_from_slice(vendor_bytes);
         }
 
-        buffer.write_u64::<LittleEndian>(self.amount)?;
+        match self.type_id {
+            TransactionType::Transfer => {
+                buffer.write_u64::<LittleEndian>(self.amount)?;
 
-        buffer.write_u32::<LittleEndian>(self.expiration)?;
+                buffer.write_u32::<LittleEndian>(self.expiration)?;
 
-        let skip_recipient_id = self.type_id == TransactionType::SecondSignatureRegistration
-            || self.type_id == TransactionType::MultiSignatureRegistration;
+                let skip_recipient_id = self.type_id == TransactionType::SecondSignatureRegistration
+                    || self.type_id == TransactionType::MultiSignatureRegistration;
 
-        let recipient_id = if !self.recipient_id.is_empty() && !skip_recipient_id {
-            // TODO: handle error
-            bs58::decode(&self.recipient_id)
-                .with_alphabet(bs58::Alphabet::BITCOIN)
-                .with_check(None)
-                .into_vec()?
-        } else {
-            iter::repeat(0).take(21).collect()
-        };
+                let recipient_id = if !self.recipient_id.is_empty() && !skip_recipient_id {
+                    bs58::decode(&self.recipient_id)
+                        .with_alphabet(bs58::Alphabet::BITCOIN)
+                        .with_check(None)
+                        .into_vec()?
+                } else {
+                    iter::repeat(0).take(21).collect()
+                };
 
-        assert_eq!(recipient_id.len(), 21, "Check length");
+                assert_eq!(recipient_id.len(), 21, "Check length");
 
-        buffer.extend_from_slice(&recipient_id);
+                buffer.extend_from_slice(&recipient_id);
+            }
+            _ => {}
+        }
 
         // Payload
         let payload: Vec<u8> = match self.asset {
@@ -202,8 +209,9 @@ impl Transaction {
         Ok(self)
     }
 
-    pub fn sign_schnorr(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
+    pub fn sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
         self.signature = private_key::sign_schnorr_bcrypto_legacy(&self.hash.hash, passphrase)?;
+
         Ok(self)
     }
 
