@@ -65,7 +65,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn get_id(&self) -> anyhow::Result<String> {
-        let bytes = self.to_bytes(false, false)?;
+        let bytes = self.to_bytes(false, false, false)?;
         Ok(hex::encode(Sha256::digest(&bytes)))
     }
 
@@ -73,12 +73,12 @@ impl Transaction {
         let private_key = private_key::from_passphrase(passphrase.as_bytes()).expect("Unable to get Secret Key");
         let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
-        self.signature = private_key::sign(&self.to_bytes(true, true).unwrap(), passphrase).expect("Unable to sign");
+        self.signature = private_key::sign(&self.to_bytes(true, true, false).unwrap(), passphrase).expect("Unable to sign");
         self
     }
 
     pub fn second_sign(&mut self, passphrase: &str) -> &Self {
-        self.sign_signature = private_key::sign(&self.to_bytes(false, true).unwrap(), passphrase).expect("Unable to sign");
+        self.sign_signature = private_key::sign(&self.to_bytes(false, true, false).unwrap(), passphrase).expect("Unable to sign");
         self
     }
 
@@ -86,7 +86,7 @@ impl Transaction {
         self.internal_verify(
             &self.sender_public_key,
             &self.signature,
-            &self.to_bytes(true, true).unwrap(),
+            &self.to_bytes(true, true, false).unwrap(),
         )
     }
 
@@ -94,11 +94,11 @@ impl Transaction {
         self.internal_verify(
             &sender_public_key,
             &self.sign_signature,
-            &self.to_bytes(false, true).unwrap(),
+            &self.to_bytes(false, true, false).unwrap(),
         )
     }
 
-    fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
+    fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool, is_second_signature: bool) -> anyhow::Result<Vec<u8>> {
         let mut buffer = vec![];
 
         buffer.write_u8(0xFF)?;
@@ -110,7 +110,9 @@ impl Transaction {
 
         buffer.write_u64::<LittleEndian>(self.nonce)?;
 
-        buffer.extend_from_slice(&hex::decode(&self.sender_public_key)?);
+        if !is_second_signature {
+            buffer.extend_from_slice(&hex::decode(&self.sender_public_key)?);
+        }
 
         buffer.write_u64::<LittleEndian>(self.fee)?;
 
@@ -198,15 +200,15 @@ impl Transaction {
         let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
 
-        let msg = self.hash_message(true, true)?;
+        let msg = self.hash_message(true, true, false)?;
         self.hash = TransactionHash { hash: *msg.as_ref()};
 
         Ok(self)
     }
 
     // Compute SHA256 hash of the input message
-    fn hash_message(&mut self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Message> {
-        let hash = Sha256::digest(self.to_bytes(skip_signature, skip_second_signature)?); // [u8; 32]
+    fn hash_message(&mut self, skip_signature: bool, skip_second_signature: bool, is_second_signature: bool) -> anyhow::Result<Message> {
+        let hash = Sha256::digest(self.to_bytes(skip_signature, skip_second_signature, is_second_signature)?); // [u8; 32]
         Ok(Message::from_digest(hash.into()))
     }
 
@@ -217,7 +219,7 @@ impl Transaction {
     }
 
     pub(crate) fn second_sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
-        let msg = self.hash_message(false, true)?;
+        let msg = self.hash_message(true, true, true)?;
 
         self.second_signature = Some(private_key::sign_schnorr_bcrypto_legacy(msg.as_ref(), passphrase)?);
 
