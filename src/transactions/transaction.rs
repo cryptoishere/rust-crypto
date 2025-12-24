@@ -2,7 +2,7 @@ use anyhow::{anyhow};
 use bs58;
 use byteorder::{LittleEndian, WriteBytesExt};
 use hex;
-use secp256k1::{Keypair, Message};
+use secp256k1::Message;
 use secp256k1::ecdsa::Signature;
 use serde_json;
 use sha2::{Digest, Sha256};
@@ -42,9 +42,9 @@ pub struct Transaction {
     pub asset: Asset,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub recipient_id: String,
-    #[serde(skip)]
-    pub second_signature: String,
     pub signature: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub second_signature: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub sign_signature: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -98,7 +98,7 @@ impl Transaction {
         )
     }
 
-    pub(crate) fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
+    fn to_bytes(&self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Vec<u8>> {
         let mut buffer = vec![];
 
         buffer.write_u8(0xFF)?;
@@ -175,8 +175,8 @@ impl Transaction {
         }
 
         // Second Signature
-        if !skip_second_signature && !self.second_signature.is_empty() {
-            buffer.extend_from_slice(&hex::decode(&self.second_signature)?);
+        if !skip_second_signature && !self.second_signature.is_none() {
+            buffer.extend_from_slice(&hex::decode(self.second_signature.as_ref().expect("Safe here"))?);
         }
 
         Ok(buffer)
@@ -191,26 +191,35 @@ impl Transaction {
         SECP256K1.verify_ecdsa(&msg, &sig, &pk).is_ok()
     }
 
-    pub fn hash(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
+    pub(crate) fn hash(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
         let private_key = private_key::from_passphrase(passphrase.as_bytes())
             .map_err(|e| anyhow!("Secp256k1 error: {}", e))?;
-        let keypair = Keypair::from_secret_key(&SECP256K1, &private_key);
-        let public_key = public_key::from_private_key(&private_key);
 
+        let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
 
-        // Compute SHA256 hash of the input message
-        let hash = Sha256::digest(self.to_bytes(true, true)?); // [u8; 32]
-        let msg = Message::from_digest(hash.into());
-
-        self.keys = SerializableKeypair::from_keys(&keypair.public_key(), &keypair.secret_key());
+        let msg = self.hash_message(true, true)?;
         self.hash = TransactionHash { hash: *msg.as_ref()};
 
         Ok(self)
     }
 
-    pub fn sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
+    // Compute SHA256 hash of the input message
+    fn hash_message(&mut self, skip_signature: bool, skip_second_signature: bool) -> anyhow::Result<Message> {
+        let hash = Sha256::digest(self.to_bytes(skip_signature, skip_second_signature)?); // [u8; 32]
+        Ok(Message::from_digest(hash.into()))
+    }
+
+    pub(crate) fn sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
         self.signature = private_key::sign_schnorr_bcrypto_legacy(&self.hash.hash, passphrase)?;
+
+        Ok(self)
+    }
+
+    pub(crate) fn second_sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
+        let msg = self.hash_message(false, true)?;
+
+        self.second_signature = Some(private_key::sign_schnorr_bcrypto_legacy(msg.as_ref(), passphrase)?);
 
         Ok(self)
     }

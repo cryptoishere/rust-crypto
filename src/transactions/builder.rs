@@ -33,9 +33,9 @@ pub fn build_transfer(
     Ok(sign(transaction, passphrase, second_passphrase)?)
 }
 
-pub fn build_transfer_hash(
+pub fn build_transfer_v2(
     passphrase: &str,
-    _second_passphrase: Option<&str>,
+    second_passphrase: Option<&str>,
     recipient_id: &str,
     amount: u64,
     vendor_field: &str,
@@ -58,6 +58,12 @@ pub fn build_transfer_hash(
     transaction.hash(passphrase)?;
 
     transaction.id = transaction.get_id()?;
+
+    transaction = transaction.sign_schnorr(passphrase)?;
+
+    if let Some(passphrase) = second_passphrase {
+        transaction = transaction.second_sign_schnorr(passphrase)?;
+    }
 
     Ok(transaction)
 }

@@ -157,8 +157,8 @@ fn serialize_signatures(transaction: &Transaction, bytes: &mut Vec<u8>) {
         write_decoded_hex(&transaction.signature, bytes);
     }
 
-    if !transaction.second_signature.is_empty() {
-        write_decoded_hex(&transaction.second_signature, bytes);
+    if !transaction.second_signature.is_none() {
+        write_decoded_hex(transaction.second_signature.as_ref().expect("Safe here"), bytes);
     } else if !transaction.sign_signature.is_empty() {
         write_decoded_hex(&transaction.sign_signature, bytes);
     }

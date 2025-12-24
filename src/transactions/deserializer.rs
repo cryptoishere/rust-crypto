@@ -230,10 +230,10 @@ fn parse_signatures(transaction: &mut Transaction, serialized: &str, asset_offse
             let second_signature_length =
                 (u8::from_str_radix(&second_signature_length_str, 16).unwrap() + 2) as usize;
 
-            transaction.second_signature = second_signature
+            transaction.second_signature = Some(second_signature
                 .chars()
                 .take(second_signature_length * 2)
-                .collect();
+                .collect());
 
             multi_signature_offset += second_signature_length * 2;
         }
@@ -278,8 +278,8 @@ fn parse_signatures(transaction: &mut Transaction, serialized: &str, asset_offse
 }
 
 fn handle_version_one(transaction: &mut Transaction) {
-    if !transaction.second_signature.is_empty() {
-        transaction.sign_signature = transaction.second_signature.to_owned();
+    if !transaction.second_signature.is_some() {
+        transaction.sign_signature = transaction.second_signature.as_ref().expect("Safe here").to_owned();
     }
 
     match transaction.type_id {
