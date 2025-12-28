@@ -42,3 +42,9 @@ impl From<u8> for TransactionType {
         unsafe { transmute(t) }
     }
 }
+
+impl From<TransactionType> for u8 {
+    fn from(t: TransactionType) -> u8 {
+        t as u8
+    }
+}
