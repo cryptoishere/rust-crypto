@@ -62,20 +62,22 @@ fn serialize_vendor_field(transaction: &Transaction, bytes: &mut Vec<u8>) {
 fn serialize_type(transaction: &Transaction, mut bytes: &mut Vec<u8>) {
     match transaction.type_id {
         TransactionType::Transfer => serialize_transfer(transaction, &mut bytes),
-        TransactionType::SecondSignatureRegistration => {
+        TransactionType::SecondSignature => {
             serialize_second_signature_registration(transaction, &mut bytes)
         }
         TransactionType::DelegateRegistration => {
             serialize_delegate_registration(transaction, &mut bytes)
         }
         TransactionType::Vote => serialize_vote(transaction, &mut bytes),
-        TransactionType::MultiSignatureRegistration => {
+        TransactionType::MultiSignature => {
             serialize_multi_signature_registration(transaction, &mut bytes)
         }
         TransactionType::Ipfs => (),
-        TransactionType::TimelockTransfer => (),
         TransactionType::MultiPayment => (),
         TransactionType::DelegateResignation => (),
+        TransactionType::HtlcLock => (),
+        TransactionType::HtlcClaim => (),
+        TransactionType::HtlcRefund => (),
     }
 }
 

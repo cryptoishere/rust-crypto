@@ -1,4 +1,5 @@
-use chrono::prelude::*;
+use chrono::{DateTime, Utc};
+
 use crate::configuration::network;
 
 pub fn get_time() -> u32 {

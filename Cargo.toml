@@ -1,8 +1,8 @@
 [package]
 name = "arkecosystem-crypto"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Joshua Noack <joshua@ark.io>"]
-description = "A simple Cryptography Implementation in Rust for the ARK Blockchain."
+description = "A simple Cryptography Implementation in Rust for the STH Blockchain."
 license = "MIT"
 edition = "2024"
 

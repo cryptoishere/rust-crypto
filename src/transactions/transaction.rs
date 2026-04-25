@@ -66,6 +66,7 @@ pub struct Transaction {
 impl Transaction {
     pub fn get_id(&self) -> anyhow::Result<String> {
         let bytes = self.to_bytes(false, false, false)?;
+
         Ok(hex::encode(Sha256::digest(&bytes)))
     }
 
@@ -73,12 +74,21 @@ impl Transaction {
         let private_key = private_key::from_passphrase(passphrase.as_bytes()).expect("Unable to get Secret Key");
         let public_key = public_key::from_private_key(&private_key);
         self.sender_public_key = public_key.to_string();
-        self.signature = private_key::sign(&self.to_bytes(true, true, false).unwrap(), passphrase).expect("Unable to sign");
+
+        self.signature = private_key::sign(
+            &self.to_bytes(true, true, false).unwrap(),
+            passphrase
+        ).expect("Unable to sign");
+
         self
     }
 
     pub fn second_sign(&mut self, passphrase: &str) -> &Self {
-        self.sign_signature = private_key::sign(&self.to_bytes(false, true, false).unwrap(), passphrase).expect("Unable to sign");
+        self.sign_signature = private_key::sign(
+            &self.to_bytes(false, true, false).unwrap(),
+            passphrase
+        ).expect("Unable to sign");
+
         self
     }
 
@@ -130,8 +140,8 @@ impl Transaction {
 
                 buffer.write_u32::<LittleEndian>(self.expiration)?;
 
-                let skip_recipient_id = self.type_id == TransactionType::SecondSignatureRegistration
-                    || self.type_id == TransactionType::MultiSignatureRegistration;
+                let skip_recipient_id = self.type_id == TransactionType::SecondSignature
+                    || self.type_id == TransactionType::MultiSignature;
 
                 let recipient_id = if !self.recipient_id.is_empty() && !skip_recipient_id {
                     bs58::decode(&self.recipient_id)
@@ -213,7 +223,7 @@ impl Transaction {
     }
 
     pub(crate) fn sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
-        self.signature = private_key::sign_schnorr_bcrypto_legacy(&self.hash.hash, passphrase)?;
+        self.signature = private_key::sign(&self.hash.hash, passphrase)?;
 
         Ok(self)
     }
@@ -221,7 +231,7 @@ impl Transaction {
     pub(crate) fn second_sign_schnorr(mut self, passphrase: &str) -> anyhow::Result<Self> {
         let msg = self.hash_message(true, true, true)?;
 
-        self.second_signature = Some(private_key::sign_schnorr_bcrypto_legacy(msg.as_ref(), passphrase)?);
+        self.second_signature = Some(private_key::sign(msg.as_ref(), passphrase)?);
 
         Ok(self)
     }

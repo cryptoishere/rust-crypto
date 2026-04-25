@@ -1,11 +1,9 @@
 use anyhow::anyhow;
 use hex;
-use secp256k1::{Error, Message, SecretKey};
+use secp256k1::{Error, SecretKey};
 use sha2::{Digest, Sha256};
 
-use crate::identities::schnorr::schnorrleg_sign;
-
-use super::super::SECP256K1;
+use crate::transactions::schnorr::sign_schnorr_bcrypto_legacy;
 
 pub fn from_passphrase(passphrase: &[u8]) -> Result<SecretKey, Error> {
     SecretKey::from_slice(&Sha256::digest(passphrase)[..])
@@ -16,22 +14,11 @@ pub fn from_hex(private_key: &str) -> Result<SecretKey, Error> {
         .map_err(|_| Error::InvalidSecretKey)?.as_slice())
 }
 
-pub fn sign(bytes: &[u8], passphrase: &str) -> Result<String, Error> {
-    let key = from_passphrase(passphrase.as_bytes())?;
-
-    let hash = Sha256::digest(bytes); // [u8; 32]
-    let msg = Message::from_digest(hash.into());
-
-    let sig = SECP256K1.sign_ecdsa(&msg, &key);
-
-    Ok(hex::encode(sig.serialize_der()))
-}
-
-pub fn sign_schnorr_bcrypto_legacy(tx_hash: &[u8], passphrase: &str) -> anyhow::Result<String> {
+pub fn sign(tx_hash: &[u8], passphrase: &str) -> anyhow::Result<String> {
     let secret_key = from_passphrase(passphrase.as_bytes()).map_err(|_| anyhow!("failed convert to bytes"))?;
     let tx_hash_32: [u8; 32] = tx_hash.try_into().map_err(|_| anyhow!("tx_hash must be 32 bytes"))?;
 
-    let sig = schnorrleg_sign(&tx_hash_32, &secret_key)?;
+    let sig = sign_schnorr_bcrypto_legacy(&tx_hash_32, &secret_key)?;
 
     Ok(hex::encode(sig))
 }
@@ -44,7 +31,7 @@ mod test {
     fn smoke_sign() {
         let msg = [0u8;32];
         let pass = "test-passphrase";
-        let sig_hex = sign_schnorr_bcrypto_legacy(&msg, pass).expect("sign");
+        let sig_hex = sign(&msg, pass).unwrap();
         assert_eq!(sig_hex.len(), 128);
     }
 

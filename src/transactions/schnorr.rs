@@ -126,7 +126,7 @@ fn u256_from_32_bytes_reduced(b: &[u8; 32]) -> U256 {
     U256::from_be_bytes(bytes[32..64].try_into().unwrap())
 }
 
-pub fn schnorrleg_sign(msg: &[u8; 32], seckey: &SecretKey) -> anyhow::Result<[u8; 64]> {
+pub(crate) fn sign_schnorr_bcrypto_legacy(msg: &[u8; 32], seckey: &SecretKey) -> anyhow::Result<[u8; 64]> {
     let secp = Secp256k1::new();
     let sk_bytes: [u8; 32] = seckey.secret_bytes();
     let pk = PublicKey::from_secret_key(&secp, seckey);
@@ -256,7 +256,7 @@ mod tests {
         msg.copy_from_slice(&msg_hash);
 
         // --- sign ---
-        let sig = schnorrleg_sign(&msg, &seckey)
+        let sig = sign_schnorr_bcrypto_legacy(&msg, &seckey)
             .expect("signing should succeed");
 
         // --- verify ---
@@ -278,7 +278,7 @@ mod tests {
         let mut msg1 = [0u8; 32];
         msg1.copy_from_slice(&msg1_hash);
 
-        let sig = schnorrleg_sign(&msg1, &seckey).unwrap();
+        let sig = sign_schnorr_bcrypto_legacy(&msg1, &seckey).unwrap();
 
         let msg2_hash = Sha256::digest(b"message two");
         let mut msg2 = [0u8; 32];
@@ -300,7 +300,7 @@ mod tests {
         let mut msg = [0u8; 32];
         msg.copy_from_slice(&msg_hash);
 
-        let mut sig = schnorrleg_sign(&msg, &seckey).unwrap();
+        let mut sig = sign_schnorr_bcrypto_legacy(&msg, &seckey).unwrap();
 
         // flip one bit in s
         sig[63] ^= 0x01;

@@ -31,7 +31,7 @@ fn deserialize_header(bytes: &mut Cursor<&[u8]>, transaction: &mut Transaction) 
     transaction.header = bytes.read_u8().unwrap();
     transaction.version = bytes.read_u8().unwrap();
     transaction.network = bytes.read_u8().unwrap();
-    transaction.type_id = bytes.read_u8().unwrap().into();
+    transaction.type_id = bytes.read_u8().unwrap().try_into().unwrap();
     transaction.timestamp = bytes.read_u32::<LittleEndian>().unwrap();
 
     let mut sender_public_key_buf = [0; 33];
@@ -59,7 +59,7 @@ fn deserialize_type(
         TransactionType::Transfer => {
             deserialize_transfer(bytes, &mut transaction, &mut asset_offset)
         }
-        TransactionType::SecondSignatureRegistration => deserialize_second_signature_registration(
+        TransactionType::SecondSignature => deserialize_second_signature_registration(
             bytes,
             &mut transaction,
             serialized,
@@ -74,13 +74,15 @@ fn deserialize_type(
         TransactionType::Vote => {
             deserialize_vote(bytes, &mut transaction, serialized, &mut asset_offset)
         }
-        TransactionType::MultiSignatureRegistration => {
+        TransactionType::MultiSignature => {
             deserialize_multi_signature_registration(bytes, &mut transaction, &mut asset_offset)
         }
         TransactionType::Ipfs => (),
-        TransactionType::TimelockTransfer => (),
         TransactionType::MultiPayment => (),
         TransactionType::DelegateResignation => (),
+        TransactionType::HtlcLock => (),
+        TransactionType::HtlcClaim => (),
+        TransactionType::HtlcRefund => (),
     }
 }
 
@@ -288,7 +290,7 @@ fn handle_version_one(transaction: &mut Transaction) {
             transaction.recipient_id =
                 address::from_public_key(&public_key, Some(transaction.network)).unwrap();
         }
-        TransactionType::MultiSignatureRegistration => {
+        TransactionType::MultiSignature => {
             if let Asset::MultiSignatureRegistration {
                 ref mut keysgroup, ..
             } = transaction.asset
@@ -311,12 +313,12 @@ fn handle_version_one(transaction: &mut Transaction) {
     }
 
     match transaction.type_id {
-        TransactionType::SecondSignatureRegistration => {
+        TransactionType::SecondSignature => {
             let public_key = public_key::from_hex(&transaction.sender_public_key).unwrap();
             transaction.recipient_id =
                 address::from_public_key(&public_key, Some(transaction.network)).unwrap();
         }
-        TransactionType::MultiSignatureRegistration => {
+        TransactionType::MultiSignature => {
             let public_key = public_key::from_hex(&transaction.sender_public_key).unwrap();
             transaction.recipient_id =
                 address::from_public_key(&public_key, Some(transaction.network)).unwrap();
