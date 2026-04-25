@@ -134,16 +134,20 @@ impl Transaction {
             buffer.extend_from_slice(vendor_bytes);
         }
 
+        // AIP11 type-specific serialization
+        match self.type_id {
+            TransactionType::MultiPayment => {
+                self.serialize_multi_payment(&mut buffer)?;
+            }
+            _ => {}
+        }
+
         match self.type_id {
             TransactionType::Transfer => {
                 buffer.write_u64::<LittleEndian>(self.amount)?;
-
                 buffer.write_u32::<LittleEndian>(self.expiration)?;
 
-                let skip_recipient_id = self.type_id == TransactionType::SecondSignature
-                    || self.type_id == TransactionType::MultiSignature;
-
-                let recipient_id = if !self.recipient_id.is_empty() && !skip_recipient_id {
+                let recipient_id = if !self.recipient_id.is_empty() {
                     bs58::decode(&self.recipient_id)
                         .with_alphabet(bs58::Alphabet::BITCOIN)
                         .with_check(None)
@@ -152,34 +156,53 @@ impl Transaction {
                     iter::repeat(0).take(21).collect()
                 };
 
-                assert_eq!(recipient_id.len(), 21, "Check length");
-
                 buffer.extend_from_slice(&recipient_id);
+            }
+            TransactionType::SecondSignature => {
+                // amount = 0
+                buffer.write_u64::<LittleEndian>(0)?;
+
+                // expiration = 0
+                buffer.write_u32::<LittleEndian>(0)?;
+
+                // recipientId = ZERO (21 bytes)
+                buffer.extend_from_slice(&vec![0u8; 21]);
+            }
+            TransactionType::Vote => {
+                // amount = 0
+                buffer.write_u64::<LittleEndian>(0)?;
+
+                // expiration = 0
+                buffer.write_u32::<LittleEndian>(0)?;
+
+                // recipientId = ZERO (21 bytes)
+                buffer.extend_from_slice(&vec![0u8; 21]);
             }
             _ => {}
         }
 
         // Payload
-        let payload: Vec<u8> = match self.asset {
-            Asset::Signature { ref public_key } => hex::decode(&public_key)?,
-            Asset::Delegate { ref username } => username.to_owned().as_bytes().to_vec(),
-            Asset::Votes(ref votes) => votes.join("").as_bytes().to_vec(),
+        match self.asset {
+            Asset::Signature { ref public_key } => {
+                buffer.extend_from_slice(&hex::decode(public_key)?);
+            }
+            Asset::Delegate { ref username } => {
+                buffer.extend_from_slice(username.as_bytes());
+            }
+            Asset::Votes(ref votes) => {
+                buffer.extend_from_slice(votes.join("").as_bytes());
+            }
             Asset::MultiSignatureRegistration {
                 min,
                 lifetime,
                 ref keysgroup,
             } => {
-                let mut buffer = vec![];
                 buffer.push(min);
                 buffer.push(lifetime);
                 buffer.extend_from_slice(keysgroup.clone().join("").as_bytes());
-
-                buffer
             }
-            _ => vec![],
-        };
-
-        buffer.extend_from_slice(&payload);
+            _ => {}
+        }
 
         // Signature
         if !skip_signature && !self.signature.is_empty() {
@@ -195,12 +218,28 @@ impl Transaction {
     }
 
     fn internal_verify(&self, sender_public_key: &str, signature: &str, hash_bytes: &[u8]) -> bool {
-        let hash = Sha256::digest(&hash_bytes);
-        let msg = Message::from_digest_slice(&hash).unwrap();
+        let hash = Sha256::digest(hash_bytes);
+        let msg: [u8; 32] = hash.into();
 
-        let sig = Signature::from_der(&hex::decode(signature).unwrap()).unwrap();
-        let pk = public_key::from_hex(&sender_public_key).unwrap();
-        SECP256K1.verify_ecdsa(&msg, &sig, &pk).is_ok()
+        let sig_bytes = match hex::decode(signature) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+
+        let pk = match public_key::from_hex(sender_public_key) {
+            Ok(pk) => pk,
+            Err(_) => return false,
+        };
+
+        if sig_bytes.len() == 64 {
+            let mut sig = [0u8; 64];
+            sig.copy_from_slice(&sig_bytes);
+
+            return crate::transactions::schnorr::schnorrleg_verify(&msg, &sig, &pk)
+                .unwrap_or(false);
+        }
+
+        false
     }
 
     pub(crate) fn hash(&mut self, passphrase: &str) -> anyhow::Result<&Self> {
@@ -242,5 +281,36 @@ impl Transaction {
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
+    }
+
+    fn serialize_multi_payment(&self, buffer: &mut Vec<u8>) -> anyhow::Result<()> {
+        use byteorder::{LittleEndian, WriteBytesExt};
+
+        if let Asset::MultiPayment { ref payments } = self.asset {
+            if payments.len() < 2 {
+                anyhow::bail!("Minimum 2 payments required");
+            }
+
+            buffer.write_u16::<LittleEndian>(payments.len() as u16)?;
+
+            for payment in payments {
+                buffer.write_u64::<LittleEndian>(payment.amount)?;
+
+                let recipient = bs58::decode(&payment.recipient_id)
+                    .with_alphabet(bs58::Alphabet::BITCOIN)
+                    .with_check(None)
+                    .into_vec()?;
+
+                if recipient.len() != 21 {
+                    anyhow::bail!("Invalid recipient length");
+                }
+
+                buffer.extend_from_slice(&recipient);
+            }
+        } else {
+            anyhow::bail!("Invalid MultiPayment asset");
+        }
+
+        Ok(())
     }
 }

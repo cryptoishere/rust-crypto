@@ -58,6 +58,10 @@ pub fn build_second_signature_registration(
     transaction.type_group = TransactionGroup::Core as u32;
     transaction.nonce = nonce;
 
+    transaction.amount = 0;
+
+    transaction.recipient_id = String::new();
+
     transaction.asset = Asset::Signature {
         public_key: hex::encode(
             public_key::from_passphrase(second_passphrase)?
@@ -100,7 +104,31 @@ mod test {
             2,
             63,
         ).expect("sign");
-        println!("{:#?}", transaction);
+        // println!("{:#?}", transaction);
         // assert_eq!(sig_hex.len(), 128);
+    }
+
+    #[test]
+    fn second_signature_registration_schnorr() {
+        let tx = build_second_signature_registration(
+            "doll maple globe organ raccoon common only pause neglect athlete prize hurry",
+            "youth soda robot orange vapor success quality silk rabbit fan model radar",
+            2,
+            2,
+            63,
+        ).expect("build");
+
+        assert_eq!(tx.type_id as u8, 1);
+        assert_eq!(tx.amount, 0);
+        assert_eq!(tx.signature.len(), 128);
+
+        match tx.asset {
+            crate::enums::assets::Asset::Signature { ref public_key } => {
+                assert!(!public_key.is_empty());
+            }
+            _ => panic!("Expected Signature asset"),
+        }
+
+        assert!(tx.verify());
     }
 }

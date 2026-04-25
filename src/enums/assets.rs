@@ -17,6 +17,10 @@ pub enum Asset {
         keysgroup: Vec<String>,
         lifetime: u8,
     },
+    #[serde(rename = "payments")]
+    MultiPayment {
+        payments: Vec<Payment>,
+    },
 }
 
 impl Asset {
@@ -32,4 +36,11 @@ impl Default for Asset {
     fn default() -> Asset {
         Asset::None
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Payment {
+    pub amount: u64,
+    #[serde(rename = "recipientId")]
+    pub recipient_id: String,
 }

@@ -16,14 +16,14 @@ impl TransactionType {
     pub fn fee(self) -> u64 {
         match self {
             TransactionType::Transfer => 10_000_000,
-            TransactionType::SecondSignature => 500_000_000,
-            TransactionType::DelegateRegistration => 2_500_000_000,
+            TransactionType::SecondSignature => 1_500_000_000,
+            TransactionType::DelegateRegistration => 2_500_000_000_000,
             TransactionType::Vote => 100_000_000,
             TransactionType::MultiSignature => 500_000_000,
             TransactionType::Ipfs => 0,
-            TransactionType::MultiPayment => 20_000_000,
+            TransactionType::MultiPayment => 60_000_000,
             TransactionType::DelegateResignation => 0,
-            TransactionType::HtlcLock => 0,
+            TransactionType::HtlcLock => 90_000_000,
             TransactionType::HtlcClaim => 0,
             TransactionType::HtlcRefund => 0,
         }
