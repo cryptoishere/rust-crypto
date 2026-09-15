@@ -18,6 +18,7 @@ pub mod identities;
 pub mod transactions;
 pub mod components;
 
+pub use secp256k1::{PublicKey, SecretKey};
 use secp256k1::{All, Secp256k1};
 
 lazy_static! {
