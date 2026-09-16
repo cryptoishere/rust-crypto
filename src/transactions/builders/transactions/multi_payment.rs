@@ -19,8 +19,8 @@ pub fn build_multi_payment(
         anyhow::bail!("Minimum 2 payments required");
     }
 
-    if payments.len() > 256 {
-        anyhow::bail!("Maximum 256 payments exceeded");
+    if payments.len() > 100 {
+        anyhow::bail!("Maximum 100 payments exceeded");
     }
 
     let mut transaction = Transaction::default();
