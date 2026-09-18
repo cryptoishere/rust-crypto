@@ -1,7 +1,7 @@
 // schnorr_bcrypto_legacy.rs
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use secp256k1::{PublicKey, Scalar, Secp256k1, SecretKey};
+use secp256k1::{PublicKey, Scalar, SecretKey};
 use sha2::{Digest, Sha256};
 use crypto_bigint::{U256, U512, NonZero, Encoding};
 use std::convert::TryInto;
@@ -127,17 +127,16 @@ fn u256_from_32_bytes_reduced(b: &[u8; 32]) -> U256 {
 }
 
 pub(crate) fn sign_schnorr_bcrypto_legacy(msg: &[u8; 32], seckey: &SecretKey) -> anyhow::Result<[u8; 64]> {
-    let secp = Secp256k1::new();
-    let sk_bytes: [u8; 32] = seckey.secret_bytes();
-    let pk = PublicKey::from_secret_key(&secp, seckey);
+    let sk_bytes: [u8; 32] = seckey.to_secret_bytes();
+    let pk = PublicKey::from_secret_key(seckey);
     let A_comp = pk.serialize();
     let k_raw_bytes = hash_nonce(&sk_bytes, msg);
     let mut k = u256_from_32_bytes_reduced(&k_raw_bytes);
     if k == U256::from_be_bytes([0u8;32]) { return Err(anyhow!("k==0")); }
 
     let mut k_bytes = k.to_be_bytes();
-    let mut R_sk = SecretKey::from_slice(&k_bytes).unwrap();
-    let mut R = PublicKey::from_secret_key(&secp, &R_sk);
+    let mut R_sk = SecretKey::from_secret_bytes(k_bytes).unwrap();
+    let mut R = PublicKey::from_secret_key(&R_sk);
     let mut R_ser = R.serialize();
     let mut R_x = [0u8; 32]; R_x.copy_from_slice(&R_ser[1..33]);
     let R_un = R.serialize_uncompressed();
@@ -156,8 +155,8 @@ pub(crate) fn sign_schnorr_bcrypto_legacy(msg: &[u8; 32], seckey: &SecretKey) ->
         k = U256::from_be_bytes(res) % *N;
         if k == U256::from_be_bytes([0u8;32]) { return Err(anyhow!("k==0 after flip")); }
         k_bytes = k.to_be_bytes();
-        R_sk = SecretKey::from_slice(&k_bytes).unwrap();
-        R = PublicKey::from_secret_key(&secp, &R_sk);
+        R_sk = SecretKey::from_secret_bytes(k_bytes).unwrap();
+        R = PublicKey::from_secret_key(&R_sk);
         R_ser = R.serialize();
         R_x.copy_from_slice(&R_ser[1..33]);
     }
@@ -181,8 +180,6 @@ pub fn schnorrleg_verify(
     sig: &[u8; 64],
     pubkey: &PublicKey,
 ) -> anyhow::Result<bool> {
-    let secp = Secp256k1::new();
-
     // ---- parse signature ----
     let mut R_x = [0u8; 32];
     R_x.copy_from_slice(&sig[..32]);
@@ -201,18 +198,18 @@ pub fn schnorrleg_verify(
     let e = u256_from_32_bytes_reduced(&e_raw);
 
     // ---- s·G ----
-    let s_sk = SecretKey::from_slice(&s.to_be_bytes()).unwrap();
-    let sG = PublicKey::from_secret_key(&secp, &s_sk);
+    let s_sk = SecretKey::from_secret_bytes(s.to_be_bytes()).unwrap();
+    let sG = PublicKey::from_secret_key(&s_sk);
 
     // ---- e·A ----
     let e_scalar = Scalar::from_be_bytes(e.to_be_bytes())
         .map_err(|_| anyhow!("invalid scalar e"))?;
 
     let mut eA = pubkey.clone();
-    eA = eA.mul_tweak(&secp, &e_scalar).unwrap();
+    eA = eA.mul_tweak(&e_scalar).unwrap();
 
     // ---- R' = sG − eA ----
-    let neg_eA = eA.negate(&secp);
+    let neg_eA = eA.negate();
     let R_prime = sG.combine(&neg_eA).unwrap();
 
     // ---- check x-coordinate ----
@@ -239,16 +236,15 @@ pub fn schnorrleg_verify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::OsRng;
+    use secp256k1::rand::rng;
 
     #[test]
     fn schnorrleg_sign_verify_roundtrip() {
-        let secp = Secp256k1::new();
-        let mut rng = OsRng;
+        let mut rng = rng();
 
         // --- keypair ---
         let seckey = SecretKey::new(&mut rng);
-        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+        let pubkey = PublicKey::from_secret_key(&seckey);
 
         // --- message ---
         let msg_hash = Sha256::digest(b"legacy schnorr test");
@@ -268,11 +264,10 @@ mod tests {
 
     #[test]
     fn schnorrleg_rejects_modified_message() {
-        let secp = Secp256k1::new();
-        let mut rng = OsRng;
+        let mut rng = rng();
 
         let seckey = SecretKey::new(&mut rng);
-        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+        let pubkey = PublicKey::from_secret_key(&seckey);
 
         let msg1_hash = Sha256::digest(b"message one");
         let mut msg1 = [0u8; 32];
@@ -290,11 +285,10 @@ mod tests {
 
     #[test]
     fn schnorrleg_rejects_modified_signature() {
-        let secp = Secp256k1::new();
-        let mut rng = OsRng;
+        let mut rng = rng();
 
         let seckey = SecretKey::new(&mut rng);
-        let pubkey = PublicKey::from_secret_key(&secp, &seckey);
+        let pubkey = PublicKey::from_secret_key(&seckey);
 
         let msg_hash = Sha256::digest(b"test message");
         let mut msg = [0u8; 32];

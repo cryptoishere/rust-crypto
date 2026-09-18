@@ -2,7 +2,6 @@ use anyhow::{Result, anyhow};
 use hex;
 use secp256k1::{PublicKey, SecretKey};
 
-use super::super::SECP256K1;
 use super::private_key;
 
 pub fn from_passphrase(passphrase: &str) -> Result<PublicKey> {
@@ -21,7 +20,7 @@ pub fn from_hex(public_key: &str) -> Result<PublicKey> {
 }
 
 pub fn from_private_key(private_key: &SecretKey) -> PublicKey {
-    PublicKey::from_secret_key(&SECP256K1, private_key)
+    PublicKey::from_secret_key(private_key)
 }
 
 #[cfg(test)]

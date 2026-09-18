@@ -11,7 +11,7 @@ pub fn from_passphrase(passphrase: &str) -> String {
     let secret_key = private_key::from_passphrase(passphrase.as_bytes())
         .expect("valid secret key");
 
-    bytes.extend_from_slice(&secret_key.secret_bytes());
+    bytes.extend_from_slice(&secret_key.to_secret_bytes());
 
     bytes.push(0x01); // compressed flag
 

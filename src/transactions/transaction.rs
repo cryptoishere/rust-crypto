@@ -3,7 +3,6 @@ use bs58;
 use byteorder::{LittleEndian, WriteBytesExt};
 use hex;
 use secp256k1::Message;
-use secp256k1::ecdsa::Signature;
 use serde_json;
 use sha2::{Digest, Sha256};
 use std::iter;
@@ -14,8 +13,6 @@ use crate::enums::assets::Asset;
 use crate::enums::TransactionType;
 use crate::identities::{private_key, public_key};
 use crate::utils::ser::is_zero;
-
-use super::super::SECP256K1;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
