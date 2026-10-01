@@ -6,4 +6,4 @@ pub mod htlc;
 
 pub use self::networks::Network;
 pub use self::transaction_types::TransactionType;
-pub use self::groups::TransactionGroup;
+pub use self::groups::TypeGroup;

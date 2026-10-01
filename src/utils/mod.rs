@@ -3,7 +3,7 @@ use hex;
 
 mod macros;
 pub(crate) mod slot;
-pub(crate) mod ser;
+pub(crate) mod core;
 
 pub fn str_from_hex(string: &str) -> Result<String, anyhow::Error> {
     Ok(String::from_utf8(hex::decode(string)?)?.to_string())

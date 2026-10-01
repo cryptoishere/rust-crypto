@@ -1,10 +1,9 @@
 use anyhow;
 
 use crate::configuration::fees;
-use crate::enums::{TransactionGroup, TransactionType};
+use crate::enums::{TypeGroup, TransactionType};
 use crate::enums::assets::Asset;
 use crate::transactions::transaction::Transaction;
-use crate::utils::slot;
 
 pub fn build_vote(
     passphrase: &str,
@@ -18,7 +17,7 @@ pub fn build_vote(
     let mut transaction = Transaction::default();
 
     transaction.type_id = TransactionType::Vote;
-    transaction.type_group = TransactionGroup::Core as u32;
+    transaction.type_group = TypeGroup::Core as u32;
 
     transaction.asset = Asset::Votes(votes);
 
@@ -28,13 +27,12 @@ pub fn build_vote(
     transaction.nonce = nonce;
     transaction.version = version;
     transaction.network = network;
-    transaction.timestamp = slot::get_time();
 
     // recipient MUST be empty (important)
     transaction.recipient_id = String::new();
 
     transaction.hash(passphrase)?;
-    transaction.id = transaction.get_id()?;
+    transaction.id = Some(transaction.get_id()?);
 
     transaction = transaction.sign_schnorr(passphrase)?;
 
@@ -69,6 +67,6 @@ mod test {
         assert!(tx.signature.len() == 128);
         assert!(tx.second_signature.is_some());
 
-        assert!(tx.verify());
+        assert!(tx.verify().unwrap());
     }
 }

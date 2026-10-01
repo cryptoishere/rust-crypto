@@ -1,10 +1,9 @@
 use anyhow;
 
 use crate::configuration::fees;
-use crate::enums::{TransactionGroup, TransactionType};
+use crate::enums::{TypeGroup, TransactionType};
 use crate::enums::assets::{Asset, Payment};
 use crate::transactions::transaction::Transaction;
-use crate::utils::slot;
 
 pub fn build_multi_payment(
     passphrase: &str,
@@ -26,7 +25,7 @@ pub fn build_multi_payment(
     let mut transaction = Transaction::default();
 
     transaction.type_id = TransactionType::MultiPayment;
-    transaction.type_group = TransactionGroup::Core as u32;
+    transaction.type_group = TypeGroup::Core as u32;
 
     transaction.asset = Asset::MultiPayment { payments };
 
@@ -36,10 +35,9 @@ pub fn build_multi_payment(
     transaction.nonce = nonce;
     transaction.version = version;
     transaction.network = network;
-    transaction.timestamp = slot::get_time();
 
     transaction.hash(passphrase)?;
-    transaction.id = transaction.get_id()?;
+    transaction.id = Some(transaction.get_id()?);
 
     transaction = transaction.sign_schnorr(passphrase)?;
 
@@ -100,9 +98,9 @@ mod test {
             _ => panic!("Expected MultiPayment asset"),
         }
 
-        assert!(!transaction.id.is_empty());
-        assert_eq!(transaction.id.len(), 64);
+        assert!(!transaction.id.as_ref().unwrap().is_empty());
+        assert_eq!(transaction.id.as_ref().unwrap().len(), 64);
 
-        assert!(transaction.verify());
+        assert!(transaction.verify().unwrap());
     }
 }

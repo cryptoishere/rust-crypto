@@ -16,6 +16,5 @@ pub mod configuration;
 pub mod enums;
 pub mod identities;
 pub mod transactions;
-pub mod components;
 
 pub use secp256k1::{PublicKey, SecretKey};

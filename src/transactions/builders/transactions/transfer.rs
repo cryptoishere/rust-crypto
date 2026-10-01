@@ -3,10 +3,9 @@ use hex;
 
 use crate::configuration::fees;
 use crate::enums::assets::Asset;
-use crate::enums::{TransactionGroup, TransactionType};
+use crate::enums::{TypeGroup, TransactionType};
 use crate::identities::public_key;
 use crate::transactions::transaction::Transaction;
-use crate::utils::slot;
 
 pub fn build_transfer(
     passphrase: &str,
@@ -28,11 +27,10 @@ pub fn build_transfer(
     transaction.nonce = nonce;
     transaction.version = version;
     transaction.network = network;
-    transaction.type_group = TransactionGroup::Core as u32;
-    transaction.timestamp = slot::get_time();
+    transaction.type_group = TypeGroup::Core as u32;
     transaction.hash(passphrase)?;
 
-    transaction.id = transaction.get_id()?;
+    transaction.id = Some(transaction.get_id()?);
 
     transaction = transaction.sign_schnorr(passphrase)?;
 
@@ -55,7 +53,7 @@ pub fn build_second_signature_registration(
 
     transaction.version = version;
     transaction.network = network;
-    transaction.type_group = TransactionGroup::Core as u32;
+    transaction.type_group = TypeGroup::Core as u32;
     transaction.nonce = nonce;
 
     transaction.amount = 0;
@@ -70,10 +68,9 @@ pub fn build_second_signature_registration(
         ),
     };
 
-    transaction.timestamp = slot::get_time();
     transaction.hash(passphrase)?;
 
-    transaction.id = transaction.get_id()?;
+    transaction.id = Some(transaction.get_id()?);
 
     transaction = transaction.sign_schnorr(passphrase)?;
 
@@ -129,6 +126,6 @@ mod test {
             _ => panic!("Expected Signature asset"),
         }
 
-        assert!(tx.verify());
+        assert!(tx.verify().unwrap());
     }
 }

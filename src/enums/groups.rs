@@ -1,11 +1,11 @@
-enum_number!(TransactionGroup {
+enum_number!(TypeGroup {
     Test = 0,
     Core = 1,
     Reserved = 1000,
 });
 
-impl Default for TransactionGroup {
-    fn default() -> TransactionGroup {
-        TransactionGroup::Core
+impl Default for TypeGroup {
+    fn default() -> TypeGroup {
+        TypeGroup::Core
     }
 }
