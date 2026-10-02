@@ -30,14 +30,14 @@ pub fn build_transfer(
     transaction.type_group = TypeGroup::Core as u32;
     transaction.hash(passphrase)?;
 
-    transaction.id = Some(transaction.get_id()?);
-
     transaction = transaction.sign_schnorr(passphrase)?;
-
+    
     if let Some(passphrase) = second_passphrase {
         log::debug!("Second sign applied.");
         transaction = transaction.second_sign_schnorr(passphrase)?;
     }
+
+    transaction.id = Some(transaction.get_id()?);
 
     Ok(transaction)
 }
@@ -70,9 +70,9 @@ pub fn build_second_signature_registration(
 
     transaction.hash(passphrase)?;
 
-    transaction.id = Some(transaction.get_id()?);
-
     transaction = transaction.sign_schnorr(passphrase)?;
+    
+    transaction.id = Some(transaction.get_id()?);
 
     Ok(transaction)
 }
